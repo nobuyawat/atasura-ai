@@ -1,0 +1,161 @@
+"use client";
+
+import React from 'react';
+import { Layout, Check, Copy } from 'lucide-react';
+import { BASE_TEMPLATES, BaseTemplateId, getBaseTemplate } from '@/lib/base-templates';
+
+// =====================================================
+// テンプレートプレビューカード
+// =====================================================
+
+interface TemplatePreviewProps {
+  templateId: BaseTemplateId;
+  isSelected: boolean;
+  onClick: () => void;
+}
+
+function TemplatePreview({ templateId, isSelected, onClick }: TemplatePreviewProps) {
+  const template = getBaseTemplate(templateId);
+  const { preview } = template;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        relative w-full p-2 rounded-lg border-2 transition-all
+        ${isSelected
+          ? 'border-indigo-500 bg-indigo-50 shadow-sm'
+          : 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50'
+        }
+      `}
+    >
+      {/* 選択チェック */}
+      {isSelected && (
+        <div className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
+          <Check className="w-3 h-3 text-white" />
+        </div>
+      )}
+
+      {/* ミニプレビュー */}
+      <div className="flex h-10 mb-1.5 rounded overflow-hidden border border-slate-200 bg-white">
+        {/* 左ブロック */}
+        {preview.leftWidth > 0 && (
+          <div
+            className={`flex items-center justify-center ${
+              preview.leftBlock === 'text'
+                ? 'bg-slate-100'
+                : preview.leftBlock === 'image'
+                ? 'bg-indigo-100'
+                : ''
+            }`}
+            style={{ width: `${preview.leftWidth}%` }}
+          >
+            {preview.leftBlock === 'text' && (
+              <div className="space-y-0.5 px-1">
+                <div className="w-6 h-0.5 bg-slate-400 rounded" />
+                <div className="w-4 h-0.5 bg-slate-300 rounded" />
+                <div className="w-5 h-0.5 bg-slate-300 rounded" />
+              </div>
+            )}
+            {preview.leftBlock === 'image' && (
+              <div className="w-5 h-5 rounded bg-indigo-300 flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-indigo-500" />
+              </div>
+            )}
+          </div>
+        )}
+        {/* 右ブロック */}
+        {preview.rightWidth > 0 && (
+          <div
+            className={`flex items-center justify-center border-l border-slate-200 ${
+              preview.rightBlock === 'text'
+                ? 'bg-slate-100'
+                : preview.rightBlock === 'image'
+                ? 'bg-indigo-100'
+                : ''
+            }`}
+            style={{ width: `${preview.rightWidth}%` }}
+          >
+            {preview.rightBlock === 'text' && (
+              <div className="space-y-0.5 px-1">
+                <div className="w-6 h-0.5 bg-slate-400 rounded" />
+                <div className="w-4 h-0.5 bg-slate-300 rounded" />
+                <div className="w-5 h-0.5 bg-slate-300 rounded" />
+              </div>
+            )}
+            {preview.rightBlock === 'image' && (
+              <div className="w-5 h-5 rounded bg-indigo-300 flex items-center justify-center">
+                <div className="w-2 h-2 rounded-full bg-indigo-500" />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* テンプレート名 */}
+      <div className="text-[10px] text-slate-600 font-medium truncate">
+        {template.shortName}
+      </div>
+    </button>
+  );
+}
+
+// =====================================================
+// テンプレートセレクターパネル
+// =====================================================
+
+interface TemplateSelectorProps {
+  selectedTemplateId: BaseTemplateId;
+  onSelectTemplate: (templateId: BaseTemplateId) => void;
+  onApplyToAll?: () => void;
+  slideCount?: number;
+}
+
+export function TemplateSelector({
+  selectedTemplateId,
+  onSelectTemplate,
+  onApplyToAll,
+  slideCount = 0,
+}: TemplateSelectorProps) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-xl p-3 mb-4">
+      {/* ヘッダー */}
+      <div className="flex items-center gap-2 mb-3">
+        <Layout className="w-4 h-4 text-indigo-600" />
+        <span className="text-sm font-bold text-slate-700">テンプレート</span>
+      </div>
+
+      {/* テンプレートグリッド */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {BASE_TEMPLATES.map((template) => (
+          <TemplatePreview
+            key={template.id}
+            templateId={template.id}
+            isSelected={selectedTemplateId === template.id}
+            onClick={() => onSelectTemplate(template.id)}
+          />
+        ))}
+      </div>
+
+      {/* 全スライドに適用ボタン */}
+      {onApplyToAll && slideCount > 1 && (
+        <button
+          onClick={onApplyToAll}
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-medium transition-colors"
+        >
+          <Copy className="w-3.5 h-3.5" />
+          <span>全{slideCount}スライドに適用</span>
+        </button>
+      )}
+
+      {/* 選択中テンプレートの説明 */}
+      <div className="mt-2 pt-2 border-t border-slate-100">
+        <div className="text-[10px] text-slate-500">
+          {getBaseTemplate(selectedTemplateId).description}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default TemplateSelector;
