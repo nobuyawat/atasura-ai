@@ -361,7 +361,7 @@ function ImageArea({
           <div className="flex gap-1 mt-2">
             <button
               onClick={(e) => { e.stopPropagation(); onImageUploadClick(); }}
-              className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-[8px] rounded"
+              className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-[8px] rounded"
             >
               <Upload className="w-3 h-3" />
             </button>
@@ -381,7 +381,7 @@ function ImageArea({
           <div className="flex flex-col gap-1 w-full max-w-[100px]">
             <button
               onClick={(e) => { e.stopPropagation(); onImageUploadClick(); }}
-              className="w-full px-2 py-1.5 bg-green-600 hover:bg-green-700 text-white text-[9px] rounded flex items-center justify-center gap-1"
+              className="w-full px-2 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[9px] rounded flex items-center justify-center gap-1"
             >
               <Upload className="w-3 h-3" />
               アップ
@@ -422,7 +422,7 @@ function ImageArea({
             <textarea
               value={editingVisualPrompt}
               onChange={(e) => onSetEditingVisualPrompt(e.target.value)}
-              placeholder="例: プレゼンする人の写真、グラフのアイコン..."
+              placeholder="例: K-POP 成功の分析グラフ、チーム写真..."
               className="flex-1 min-h-[48px] p-2 text-[9px] border border-slate-200 rounded resize-none focus:outline-none focus:ring-1 focus:ring-purple-500"
             />
             {slide.visualPromptHistory && slide.visualPromptHistory.length > 0 && (

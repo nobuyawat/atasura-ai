@@ -73,10 +73,10 @@ export const ThumbnailStack: React.FC = () => {
   }, []); // 依存配列は空 - 状態変化でタイマーを再作成しない
 
   return (
-    <div className="relative w-full max-w-[640px] aspect-[16/9] group cursor-pointer">
-      {/* Background cards for depth */}
-      <div className="absolute top-[-15%] right-[-10%] w-[90%] h-full bg-indigo-900/40 rounded-3xl -rotate-6 blur-[2px] opacity-40 scale-90 border border-white/5" />
-      <div className="absolute top-[-8%] right-[-5%] w-[95%] h-full bg-purple-900/40 rounded-3xl -rotate-3 blur-[1px] opacity-60 scale-95 border border-white/10" />
+    <div className="relative w-full max-w-[640px] aspect-[16/9] group cursor-pointer overflow-visible">
+      {/* Background cards for depth - hidden on mobile for performance */}
+      <div className="hidden sm:block absolute top-[-15%] right-[-10%] w-[90%] h-full bg-indigo-900/40 rounded-3xl -rotate-6 blur-[2px] opacity-40 scale-90 border border-white/5" />
+      <div className="hidden sm:block absolute top-[-8%] right-[-5%] w-[95%] h-full bg-purple-900/40 rounded-3xl -rotate-3 blur-[1px] opacity-60 scale-95 border border-white/10" />
 
       {/* Main card */}
       <div className="relative w-full h-full bg-[#1e1f2b] rounded-3xl overflow-hidden border-4 border-white/10 shadow-2xl shadow-black/50 transition-transform duration-500 group-hover:scale-[1.02] group-hover:-translate-y-2">

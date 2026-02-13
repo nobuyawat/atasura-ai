@@ -150,33 +150,40 @@ function convertBlocksToSlide(blocks: ScriptBlock[]): SlideData {
 // =====================================================
 // Visual Prompt 自動生成（スライドコンテンツ→抽象的ビジュアル概念）
 // =====================================================
-function generateVisualPromptFromContent(title: string, bullets: string[]): string {
-  // タイトルとbulletsからキーワードを抽出
-  const allText = [title, ...bullets].join(' ');
+function generateVisualPromptFromContent(title: string, bullets: string[], speakerNotes?: string): string {
+  // スライド内容からキーワードを抽出して、ユーザーにわかりやすい日本語プロンプトを生成
+  const parts: string[] = [];
 
-  // 一般的なビジネス/教育コンテンツのパターンを検出
-  const patterns = [
-    { keywords: ['ステップ', '手順', 'プロセス', '流れ', 'フロー'], visual: 'flowing abstract arrows showing progression and steps' },
-    { keywords: ['比較', '違い', 'メリット', 'デメリット', '対比'], visual: 'abstract split design showing contrast and comparison' },
-    { keywords: ['成長', '増加', '向上', '上昇', '売上'], visual: 'upward abstract growth curves and rising geometric shapes' },
-    { keywords: ['戦略', '計画', 'ビジネス', '目標'], visual: 'strategic geometric shapes representing business planning' },
-    { keywords: ['チーム', '組織', '協力', '連携'], visual: 'interconnected abstract circles representing teamwork' },
-    { keywords: ['データ', '分析', '統計', '数値'], visual: 'abstract data visualization with geometric charts' },
-    { keywords: ['技術', 'テクノロジー', 'システム', 'AI'], visual: 'modern tech-inspired abstract circuits and nodes' },
-    { keywords: ['顧客', 'ユーザー', '満足', 'サービス'], visual: 'warm abstract shapes symbolizing customer care' },
-    { keywords: ['問題', '課題', '解決', 'ソリューション'], visual: 'puzzle-like abstract shapes showing problem solving' },
-    { keywords: ['基本', '入門', '概要', '導入'], visual: 'clean minimalist geometric foundation shapes' },
-  ];
-
-  // マッチするパターンを探す
-  for (const pattern of patterns) {
-    if (pattern.keywords.some(kw => allText.includes(kw))) {
-      return `Professional minimalist illustration: ${pattern.visual}. Clean white background, soft gradients, modern business style.`;
-    }
+  // タイトルから主題を抽出
+  if (title && title.trim()) {
+    parts.push(title.trim());
   }
 
-  // デフォルト: 抽象的なビジネスビジュアル
-  return 'Professional minimalist business illustration with geometric shapes, soft blue gradients, and clean white background. Modern abstract design suitable for presentations.';
+  // 箇条書きからキーワードを抽出（最大3つ、短いものを優先）
+  const shortBullets = bullets
+    .filter(b => b.trim())
+    .map(b => b.trim())
+    .filter(b => b.length <= 30)
+    .slice(0, 3);
+  if (shortBullets.length > 0) {
+    parts.push(shortBullets.join('、'));
+  }
+
+  // スピーカーノートからキーワードを補足（タイトル/箇条書きが薄い場合）
+  if (parts.length === 0 && speakerNotes && speakerNotes.trim()) {
+    // ノートの先頭から短いフレーズを抽出
+    const noteSnippet = speakerNotes.trim().slice(0, 60).replace(/\n/g, ' ');
+    parts.push(noteSnippet);
+  }
+
+  // 内容があればそれをベースにプロンプトを組み立て
+  if (parts.length > 0) {
+    const content = parts.join(' / ');
+    return `${content} に関するイラスト・図解`;
+  }
+
+  // フォールバック
+  return 'アイコン/図解/写真など';
 }
 
 // =====================================================
@@ -964,7 +971,7 @@ export default function EditorScreen({ course, onCourseUpdate }: EditorScreenPro
       const visualPrompt = customVisualPrompt ||
         slide.visualPrompt ||
         slide.imageIntent ||
-        generateVisualPromptFromContent(slide.title, slide.bullets);
+        generateVisualPromptFromContent(slide.title, slide.bullets, slide.speakerNotes);
 
       console.log('[IMAGE_GEN] Using visualPrompt:', visualPrompt);
 
@@ -1056,9 +1063,10 @@ export default function EditorScreen({ course, onCourseUpdate }: EditorScreenPro
   // Visual Promptを編集開始
   const handleStartEditingVisualPrompt = useCallback((slide: Slide) => {
     // 現在のプロンプトまたは自動生成プロンプトをセット
+    // 優先順位: 既存のvisualPrompt > imageIntent > スライド内容から自動生成
     const currentPrompt = slide.visualPrompt ||
       slide.imageIntent ||
-      generateVisualPromptFromContent(slide.title, slide.bullets);
+      generateVisualPromptFromContent(slide.title, slide.bullets, slide.speakerNotes);
     setEditingVisualPrompt(currentPrompt);
     setIsEditingVisualPrompt(true);
     setShowPromptHistory(false);

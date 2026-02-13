@@ -421,31 +421,6 @@ export default function FaqPage() {
         </div>
       </section>
 
-      {/* Announcements Section */}
-      <section id="announcements" className="pb-16 px-6">
-        <div className="max-w-[900px] mx-auto">
-          <h2 className="text-2xl md:text-3xl font-black mb-6 tracking-tight flex items-center gap-3">
-            <span className="text-2xl">📢</span>
-            <span>お知らせ</span>
-          </h2>
-          <div className="grid gap-3">
-            {ANNOUNCEMENTS.map((item) => (
-              <div
-                key={item.id}
-                className="border border-white/5 bg-[#0f121d] rounded-2xl p-5 md:p-6 flex items-start gap-4 hover:border-white/10 hover:bg-[#141827] transition-all duration-300"
-              >
-                <span className="flex-shrink-0 text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 rounded-md px-2.5 py-1 mt-0.5 whitespace-nowrap">
-                  {item.date}
-                </span>
-                <p className="text-slate-200 text-sm md:text-base leading-relaxed">
-                  {item.content}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* FAQ Grid */}
       <section className="pb-32 px-6">
         <div className="max-w-4xl mx-auto grid gap-4">

@@ -31,7 +31,7 @@ const NavLink: React.FC<{ href: string; icon: React.ReactNode; text: string }> =
 // ヘッダーコンポーネント
 const Header: React.FC = () => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center py-6 px-4">
+    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center py-3 lg:py-6 px-4">
       <div className="max-w-[1400px] w-full flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3">
@@ -73,34 +73,34 @@ const Header: React.FC = () => {
 // ヒーローセクション
 const Hero: React.FC = () => {
   return (
-    <section className="pt-24 lg:pt-28 pb-20 px-6 flex justify-center min-h-screen">
+    <section className="pt-20 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
       <div className="max-w-[1400px] w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
         {/* Left Column: Text Content */}
         <div className="lg:col-span-5 space-y-10">
-          <div className="-mt-6 lg:-mt-10 inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 backdrop-blur-sm shadow-[0_0_15px_rgba(255,255,255,0.05)]">
-            <Zap size={14} className="text-yellow-400 fill-yellow-400" />
-            <span className="text-xs font-bold tracking-wider text-yellow-100 uppercase font-mono">
+          <div className="-mt-6 lg:-mt-10 inline-flex items-center gap-1.5 sm:gap-2 bg-white/5 border border-white/10 rounded-full px-3 sm:px-4 py-1.5 backdrop-blur-sm shadow-[0_0_15px_rgba(255,255,255,0.05)]">
+            <Zap size={14} className="text-yellow-400 fill-yellow-400 flex-shrink-0" />
+            <span className="text-[10px] sm:text-xs font-bold tracking-wider text-yellow-100 uppercase font-mono">
               👉 HEADSLIDE AI-POWERED ENGINE
             </span>
-            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse ml-1" />
+            <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse ml-1 flex-shrink-0" />
           </div>
 
           {/* Headlines */}
           <div className="space-y-4">
             <h2 className="font-black leading-[1.15] tracking-tight">
-              <div className="text-2xl lg:text-[43px] mb-2 whitespace-nowrap">
+              <div className="text-xl sm:text-2xl lg:text-[43px] mb-2">
                 <span className="text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.3)]">朝礼</span>
                 <span className="text-white">から</span>
                 <span className="text-rose-500 drop-shadow-[0_0_20px_rgba(244,63,94,0.3)]">Youtube講座</span>
                 <span className="text-white">まで対応</span>
               </div>
 
-              <div className="text-3xl lg:text-5xl text-yellow-400 text-glow-yellow whitespace-nowrap">
+              <div className="text-2xl sm:text-3xl lg:text-5xl text-yellow-400 text-glow-yellow">
                 思考言語・資料化同時作成ツール
               </div>
 
-              <div className="text-white text-3xl lg:text-5xl mt-2">
+              <div className="text-white text-2xl sm:text-3xl lg:text-5xl mt-2">
                 無料で3分完成
               </div>
             </h2>
@@ -113,12 +113,12 @@ const Hero: React.FC = () => {
           </p>
 
           {/* Buttons */}
-          <div className="flex flex-wrap items-center gap-4">
-            <Link href="/login" className="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-8 py-4 rounded-xl text-lg font-black transition-all shadow-[0_0_30px_rgba(225,29,72,0.3)] active:scale-95 group">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <Link href="/login" className="flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-base sm:text-lg font-black transition-all shadow-[0_0_30px_rgba(225,29,72,0.3)] active:scale-95 group">
               <Zap size={20} className="fill-white" />
               <span>今すぐ無料で試す</span>
             </Link>
-            <Link href="/demo" className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/10 px-8 py-4 rounded-xl text-lg font-black transition-all backdrop-blur-sm active:scale-95 group">
+            <Link href="/demo" className="flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/10 px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl text-base sm:text-lg font-black transition-all backdrop-blur-sm active:scale-95 group">
               <Play size={20} className="fill-white" />
               <span>デモを見る</span>
             </Link>
@@ -163,12 +163,46 @@ const Hero: React.FC = () => {
   );
 };
 
+// お知らせセクション
+const Announcements: React.FC = () => {
+  const items = [
+    { id: 'a1', date: '○月○日', content: 'アタスラAIをローンチしました。' },
+  ];
+
+  return (
+    <section id="announcements" className="pb-16 pt-8 px-6">
+      <div className="max-w-[900px] mx-auto">
+        <h2 className="text-xl md:text-2xl font-black mb-5 tracking-tight flex items-center gap-3">
+          <span className="text-xl">📢</span>
+          <span>お知らせ</span>
+        </h2>
+        <div className="grid gap-3">
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="border border-white/5 bg-white/[0.03] backdrop-blur-sm rounded-2xl p-4 md:p-5 flex items-start gap-4 hover:border-white/10 hover:bg-white/[0.05] transition-all duration-300"
+            >
+              <span className="flex-shrink-0 text-xs font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 rounded-md px-2.5 py-1 mt-0.5 whitespace-nowrap">
+                {item.date}
+              </span>
+              <p className="text-slate-300 text-sm md:text-base leading-relaxed">
+                {item.content}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-main relative">
+    <div className="min-h-screen bg-main relative overflow-x-hidden">
       <Header />
       <main>
         <Hero />
+        <Announcements />
       </main>
 
       {/* Decorative background elements */}
@@ -176,7 +210,7 @@ export default function LandingPage() {
       <div className="absolute top-[20%] right-[-5%] w-[30%] h-[30%] bg-purple-900/10 blur-[120px] rounded-full -z-10" />
 
       {/* Footer / Scroll indicator */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-50">
+      <div className="py-8 flex flex-col items-center gap-2 opacity-50">
         <div className="w-5 h-8 border-2 border-white/30 rounded-full flex justify-center pt-1">
           <div className="w-1 h-1.5 bg-white rounded-full animate-bounce" />
         </div>
