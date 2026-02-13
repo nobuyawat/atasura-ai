@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { ArrowLeft, BarChart3, Zap, Clock, Hash } from 'lucide-react';
+import { ArrowLeft, BarChart3, Zap, Clock, Hash, AlertTriangle, RefreshCw } from 'lucide-react';
 
 // ===============================
 // 型定義
@@ -54,21 +54,25 @@ const ACTION_LABELS: Record<string, string> = {
   script_generation: '台本生成',
   slide_generation: 'スライド生成',
   image_prompt_translation: '画像プロンプト翻訳',
-  image_generation: '画像生成',
+  image_generation: '画像生成（Imagen）',
 };
+
+/** Imagen 4 はトークン概念がないアクションタイプ */
+const NO_TOKEN_ACTIONS = new Set(['image_generation']);
 
 function formatNumber(n: number): string {
   return n.toLocaleString('ja-JP');
 }
 
+/** トークン数の表示: Imagen系は N/A、それ以外は数値 */
+function formatTokens(n: number | null, actionType: string): string {
+  if (NO_TOKEN_ACTIONS.has(actionType)) return 'N/A';
+  return formatNumber(n || 0);
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function formatDateShort(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 // ===============================
@@ -78,90 +82,119 @@ function formatDateShort(iso: string): string {
 export default function UsagePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<GenerationLog[]>([]);
   const [actionSummary, setActionSummary] = useState<ActionSummary[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummary[]>([]);
   const [totalTokens, setTotalTokens] = useState(0);
   const [totalCalls, setTotalCalls] = useState(0);
+  const [tokenCalls, setTokenCalls] = useState(0); // トークンがある呼び出しのみ
 
   useEffect(() => {
     fetchUsageData();
   }, []);
 
   async function fetchUsageData() {
-    const supabase = createClient();
+    setLoading(true);
+    setError(null);
 
-    // 認証チェック
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/login?redirect=/app/usage');
-      return;
+    try {
+      const supabase = createClient();
+
+      // 認証チェック
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) {
+        console.error('[usage] Auth error:', authError.message);
+        setError(`認証エラー: ${authError.message}`);
+        setLoading(false);
+        return;
+      }
+      if (!user) {
+        router.push('/login?redirect=/app/usage');
+        return;
+      }
+
+      // 今月の開始日
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+      console.log('[usage] Fetching logs for user:', user.id, 'since:', monthStart);
+
+      // 直近50件のログ取得
+      const { data: recentLogs, error: queryError } = await supabase
+        .from('generation_logs')
+        .select('id, action_type, input_tokens, output_tokens, total_tokens, model, duration_ms, success, created_at')
+        .eq('user_id', user.id)
+        .gte('created_at', monthStart)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (queryError) {
+        console.error('[usage] Query error:', queryError.message, queryError.code, queryError.details);
+        // RLSエラーの典型パターン
+        if (queryError.code === '42501' || queryError.message.includes('permission')) {
+          setError('generation_logs テーブルへのアクセス権限がありません。RLSポリシーを確認してください。');
+        } else {
+          setError(`データ取得エラー: ${queryError.message}`);
+        }
+        setLoading(false);
+        return;
+      }
+
+      console.log('[usage] Fetched logs:', recentLogs?.length || 0, 'records');
+
+      const allLogs = recentLogs || [];
+      setLogs(allLogs);
+
+      // サマリー計算（Imagen系はトークン集計から除外）
+      const tokenLogs = allLogs.filter(l => !NO_TOKEN_ACTIONS.has(l.action_type));
+      const total = tokenLogs.reduce((sum, l) => sum + (l.total_tokens || 0), 0);
+      setTotalTokens(total);
+      setTotalCalls(allLogs.length);
+      setTokenCalls(tokenLogs.length);
+
+      // 機能別集計
+      const actionMap = new Map<string, ActionSummary>();
+      for (const log of allLogs) {
+        const key = log.action_type;
+        const existing = actionMap.get(key) || {
+          action_type: key,
+          count: 0,
+          total_prompt_tokens: 0,
+          total_output_tokens: 0,
+          total_tokens: 0,
+          avg_duration_ms: 0,
+        };
+        existing.count++;
+        existing.total_prompt_tokens += log.input_tokens || 0;
+        existing.total_output_tokens += log.output_tokens || 0;
+        existing.total_tokens += log.total_tokens || 0;
+        existing.avg_duration_ms += log.duration_ms || 0;
+        actionMap.set(key, existing);
+      }
+      // 平均durationを計算
+      const summaries = Array.from(actionMap.values()).map(s => ({
+        ...s,
+        avg_duration_ms: s.count > 0 ? Math.round(s.avg_duration_ms / s.count) : 0,
+      }));
+      setActionSummary(summaries);
+
+      // 日別集計
+      const dailyMap = new Map<string, DailySummary>();
+      for (const log of allLogs) {
+        const date = log.created_at.split('T')[0];
+        const existing = dailyMap.get(date) || { date, count: 0, total_tokens: 0 };
+        existing.count++;
+        existing.total_tokens += log.total_tokens || 0;
+        dailyMap.set(date, existing);
+      }
+      const dailies = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+      setDailySummary(dailies);
+
+    } catch (err: any) {
+      console.error('[usage] Unexpected error:', err);
+      setError(`予期しないエラー: ${err?.message || '不明なエラー'}`);
     }
-
-    // 今月の開始日
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-    // 直近50件のログ取得
-    const { data: recentLogs, error } = await supabase
-      .from('generation_logs')
-      .select('id, action_type, input_tokens, output_tokens, total_tokens, model, duration_ms, success, created_at')
-      .eq('user_id', user.id)
-      .gte('created_at', monthStart)
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) {
-      console.error('[usage] Failed to fetch logs:', error);
-      setLoading(false);
-      return;
-    }
-
-    const allLogs = recentLogs || [];
-    setLogs(allLogs);
-
-    // サマリー計算
-    const total = allLogs.reduce((sum, l) => sum + (l.total_tokens || 0), 0);
-    setTotalTokens(total);
-    setTotalCalls(allLogs.length);
-
-    // 機能別集計
-    const actionMap = new Map<string, ActionSummary>();
-    for (const log of allLogs) {
-      const key = log.action_type;
-      const existing = actionMap.get(key) || {
-        action_type: key,
-        count: 0,
-        total_prompt_tokens: 0,
-        total_output_tokens: 0,
-        total_tokens: 0,
-        avg_duration_ms: 0,
-      };
-      existing.count++;
-      existing.total_prompt_tokens += log.input_tokens || 0;
-      existing.total_output_tokens += log.output_tokens || 0;
-      existing.total_tokens += log.total_tokens || 0;
-      existing.avg_duration_ms += log.duration_ms || 0;
-      actionMap.set(key, existing);
-    }
-    // 平均durationを計算
-    const summaries = Array.from(actionMap.values()).map(s => ({
-      ...s,
-      avg_duration_ms: s.count > 0 ? Math.round(s.avg_duration_ms / s.count) : 0,
-    }));
-    setActionSummary(summaries);
-
-    // 日別集計
-    const dailyMap = new Map<string, DailySummary>();
-    for (const log of allLogs) {
-      const date = log.created_at.split('T')[0];
-      const existing = dailyMap.get(date) || { date, count: 0, total_tokens: 0 };
-      existing.count++;
-      existing.total_tokens += log.total_tokens || 0;
-      dailyMap.set(date, existing);
-    }
-    const dailies = Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
-    setDailySummary(dailies);
 
     setLoading(false);
   }
@@ -190,10 +223,35 @@ export default function UsagePage() {
             <h1 className="text-lg font-bold">Token Usage</h1>
           </div>
           <span className="text-xs text-gray-500 ml-2">今月の使用量</span>
+          <button
+            onClick={() => fetchUsageData()}
+            className="ml-auto p-2 rounded-lg hover:bg-white/5 transition-colors text-gray-400 hover:text-white"
+            title="リロード"
+          >
+            <RefreshCw size={16} />
+          </button>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-8">
+
+        {/* ===== エラー表示 ===== */}
+        {error && (
+          <section className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-red-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-red-300 text-sm font-medium">エラーが発生しました</p>
+              <p className="text-red-400/80 text-xs mt-1">{error}</p>
+              <button
+                onClick={() => fetchUsageData()}
+                className="mt-2 text-xs text-red-300 underline hover:text-red-200"
+              >
+                再試行
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* ===== サマリーカード ===== */}
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
@@ -202,6 +260,7 @@ export default function UsagePage() {
               <span className="text-xs text-gray-400 font-medium">合計トークン</span>
             </div>
             <p className="text-2xl font-black tabular-nums">{formatNumber(totalTokens)}</p>
+            <p className="text-xs text-gray-500 mt-1">※ Imagen除外</p>
           </div>
           <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-2">
@@ -209,6 +268,7 @@ export default function UsagePage() {
               <span className="text-xs text-gray-400 font-medium">API呼び出し回数</span>
             </div>
             <p className="text-2xl font-black tabular-nums">{formatNumber(totalCalls)}</p>
+            <p className="text-xs text-gray-500 mt-1">うちGemini: {tokenCalls}回</p>
           </div>
           <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-2">
@@ -216,8 +276,9 @@ export default function UsagePage() {
               <span className="text-xs text-gray-400 font-medium">平均トークン/回</span>
             </div>
             <p className="text-2xl font-black tabular-nums">
-              {totalCalls > 0 ? formatNumber(Math.round(totalTokens / totalCalls)) : '—'}
+              {tokenCalls > 0 ? formatNumber(Math.round(totalTokens / tokenCalls)) : '—'}
             </p>
+            <p className="text-xs text-gray-500 mt-1">Gemini APIのみ</p>
           </div>
         </section>
 
@@ -236,23 +297,35 @@ export default function UsagePage() {
                   <th className="text-right py-2 px-3 font-medium">Prompt</th>
                   <th className="text-right py-2 px-3 font-medium">Output</th>
                   <th className="text-right py-2 px-3 font-medium">合計</th>
+                  <th className="text-right py-2 px-3 font-medium">tokens/credit</th>
                   <th className="text-right py-2 px-3 font-medium">平均ms</th>
                 </tr>
               </thead>
               <tbody>
                 {actionSummary.length === 0 ? (
-                  <tr><td colSpan={6} className="text-center py-6 text-gray-500">データなし</td></tr>
+                  <tr><td colSpan={7} className="text-center py-6 text-gray-500">データなし</td></tr>
                 ) : (
-                  actionSummary.map(s => (
-                    <tr key={s.action_type} className="border-b border-white/5 hover:bg-white/[0.02]">
-                      <td className="py-2.5 px-3 text-gray-300">{ACTION_LABELS[s.action_type] || s.action_type}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums">{s.count}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(s.total_prompt_tokens)}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(s.total_output_tokens)}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums font-medium">{formatNumber(s.total_tokens)}</td>
-                      <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(s.avg_duration_ms)}</td>
-                    </tr>
-                  ))
+                  actionSummary.map(s => {
+                    const isNoToken = NO_TOKEN_ACTIONS.has(s.action_type);
+                    const tokensPerCredit = isNoToken ? 'N/A' : (s.count > 0 ? formatNumber(Math.round(s.total_tokens / s.count)) : '—');
+                    return (
+                      <tr key={s.action_type} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="py-2.5 px-3 text-gray-300">{ACTION_LABELS[s.action_type] || s.action_type}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums">{s.count}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">
+                          {isNoToken ? <span className="text-gray-600">N/A</span> : formatNumber(s.total_prompt_tokens)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">
+                          {isNoToken ? <span className="text-gray-600">N/A</span> : formatNumber(s.total_output_tokens)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums font-medium">
+                          {isNoToken ? <span className="text-gray-600">N/A</span> : formatNumber(s.total_tokens)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-indigo-400 font-medium">{tokensPerCredit}</td>
+                        <td className="py-2.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(s.avg_duration_ms)}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -310,17 +383,26 @@ export default function UsagePage() {
                     まだログがありません。骨子→台本→スライドを生成すると、ここに表示されます。
                   </td></tr>
                 ) : (
-                  logs.map(log => (
-                    <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                      <td className="py-2 px-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(log.created_at)}</td>
-                      <td className="py-2 px-3 text-gray-300 text-xs">{ACTION_LABELS[log.action_type] || log.action_type}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-gray-400">{formatNumber(log.input_tokens || 0)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-gray-400">{formatNumber(log.output_tokens || 0)}</td>
-                      <td className="py-2 px-3 text-right tabular-nums font-medium">{formatNumber(log.total_tokens || 0)}</td>
-                      <td className="py-2 px-3 text-gray-500 text-xs whitespace-nowrap">{log.model || '—'}</td>
-                      <td className="py-2 px-3 text-right tabular-nums text-gray-400">{log.duration_ms ? formatNumber(log.duration_ms) : '—'}</td>
-                    </tr>
-                  ))
+                  logs.map(log => {
+                    const isNoToken = NO_TOKEN_ACTIONS.has(log.action_type);
+                    return (
+                      <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                        <td className="py-2 px-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(log.created_at)}</td>
+                        <td className="py-2 px-3 text-gray-300 text-xs">{ACTION_LABELS[log.action_type] || log.action_type}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">
+                          {isNoToken ? <span className="text-gray-600 text-xs">N/A</span> : formatNumber(log.input_tokens || 0)}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">
+                          {isNoToken ? <span className="text-gray-600 text-xs">N/A</span> : formatNumber(log.output_tokens || 0)}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums font-medium">
+                          {isNoToken ? <span className="text-gray-600 text-xs">N/A</span> : formatNumber(log.total_tokens || 0)}
+                        </td>
+                        <td className="py-2 px-3 text-gray-500 text-xs whitespace-nowrap">{log.model || '—'}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">{log.duration_ms ? formatNumber(log.duration_ms) : '—'}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -330,7 +412,8 @@ export default function UsagePage() {
         {/* ===== 注記 ===== */}
         <section className="text-xs text-gray-500 space-y-1 pb-10">
           <p>* トークン数は Gemini API の usageMetadata から取得しています。</p>
-          <p>* 画像生成（Imagen 4）にはトークン概念がないため、トークン数は0と表示されます。</p>
+          <p>* 画像生成（Imagen 4）にはトークン概念がないため「N/A」と表示されます。</p>
+          <p>* tokens/credit は「1回のAPI呼び出し（= 1クレジット消費）あたりの実トークン数」です。</p>
           <p>* 1クレジット消費に対する実トークン数は、機能や入力量により変動します。</p>
         </section>
       </main>
