@@ -43,7 +43,7 @@ interface PricingPlan {
 }
 
 // Plans Data
-const PAID_DISCLAIMER = '※5分動画＝骨子＋台本＋画像生成の標準構成を基準とした目安です。';
+const PAID_DISCLAIMER = '※5分動画相当＝骨子＋台本＋画像生成の標準構成を基準とした目安です。';
 
 const PLANS: PricingPlan[] = [
   {
@@ -71,7 +71,7 @@ const PLANS: PricingPlan[] = [
     description: 'AIを初めて使う人に',
     price: '500',
     period: '/ 月',
-    usageLimit: '5分動画 5本以上 作成可能',
+    usageLimit: '5分動画相当の台本 5本以上 生成可能',
     videoCount: '5本以上',
     creditBadge: '30クレジット',
     ctaText: '申し込む',
@@ -92,7 +92,7 @@ const PLANS: PricingPlan[] = [
     description: '一番選ばれている標準プラン',
     price: '990',
     period: '/ 月',
-    usageLimit: '5分動画 50本以上 作成可能',
+    usageLimit: '5分動画相当の台本 50本以上 生成可能',
     videoCount: '50本以上',
     creditBadge: '300クレジット',
     ctaText: '申し込む',
@@ -114,7 +114,7 @@ const PLANS: PricingPlan[] = [
     description: '仕事でガッツリ使う方向け',
     price: '1,980',
     period: '/ 月',
-    usageLimit: '5分動画 100本以上 作成可能',
+    usageLimit: '5分動画相当の台本 100本以上 生成可能',
     videoCount: '100本以上',
     creditBadge: '600クレジット',
     ctaText: '申し込む',
@@ -216,9 +216,9 @@ const PricingCard = ({ plan, onSelect, isLoading }: { plan: PricingPlan; onSelec
                   ? `bg-pink-500/20 ring-pink-500/40 group-hover:bg-pink-500/30 group-hover:ring-pink-500/60`
                   : `bg-white/5 ring-white/10 group-hover:bg-white/10 group-hover:ring-white/30`
               }`}>
-                <span className="text-gray-400 text-[11px] font-bold">5分動画</span>
+                <span className="text-gray-400 text-[11px] font-bold leading-snug text-center text-balance">5分動画相当の台本</span>
                 <span className={`text-xl font-black leading-tight ${theme.accent}`}>{plan.videoCount}</span>
-                <span className="text-white font-black text-xs">作成可能</span>
+                <span className="text-white font-black text-xs">生成可能</span>
               </div>
 
               {/* Sub: Credit badge */}
