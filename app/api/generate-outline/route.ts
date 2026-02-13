@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
             { status: consumeResult.error === 'insufficient_credits' ? 402 : 500 }
           );
         }
-        console.log(`[generate-outline] Credit consumed: user=${userId}, remaining=${consumeResult.creditsRemaining}`);
+        console.log(`[generate-outline] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 

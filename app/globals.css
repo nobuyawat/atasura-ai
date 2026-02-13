@@ -21,6 +21,16 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* アンカースクロール時にヘッダー+ナビタブ分の余白を確保 */
+html {
+  scroll-padding-top: 110px;
+}
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-top: 80px;
+  }
+}
+
 /* ============================================
    背景・グロー効果 (integrated から移植)
    ============================================ */

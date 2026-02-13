@@ -204,7 +204,7 @@ export default function VoicesPage() {
       </header>
 
       {/* Page Content */}
-      <main className="relative pt-32 pb-20">
+      <main className="relative pt-[104px] lg:pt-32 pb-20">
         {/* Background Decorative Element */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-screen-xl h-[600px] pointer-events-none">
           <div className="absolute top-20 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 blur-[120px] rounded-full"></div>

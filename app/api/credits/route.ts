@@ -4,11 +4,17 @@
  *
  * フロントエンドからクレジット残高を取得
  * 無料プランの場合は回数制情報も返す
+ *
+ * 注意: キャッシュ厳禁（通常/シークレット問わず常にDB最新値を返す）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkCredits, checkFreePlanLimit, CREDITS_PER_VIDEO, PLAN_CREDITS } from '@/lib/credits';
+
+// Vercel / Next.js のレスポンスキャッシュを完全に無効化
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +31,9 @@ export async function GET(request: NextRequest) {
 
     const creditCheck = await checkCredits(user.id);
 
+    // デバッグログ（Vercel Logs で確認用）
+    console.log(`[credits] GET: user=${user.id}, plan=${creditCheck.plan}, credits_remaining=${creditCheck.creditsRemaining}`);
+
     // 動画換算数も返す
     const videosRemaining = Math.floor(creditCheck.creditsRemaining / CREDITS_PER_VIDEO);
     const videosLimit = Math.floor((PLAN_CREDITS[creditCheck.plan] || 0) / CREDITS_PER_VIDEO);
@@ -32,7 +41,7 @@ export async function GET(request: NextRequest) {
     // 無料プランの回数制情報
     const freePlanCheck = await checkFreePlanLimit(user.id);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       creditsRemaining: creditCheck.creditsRemaining,
       creditsLimit: PLAN_CREDITS[creditCheck.plan] || 0,
       creditsPerVideo: CREDITS_PER_VIDEO,
@@ -47,6 +56,12 @@ export async function GET(request: NextRequest) {
         locked: freePlanCheck.locked,
       },
     });
+
+    // CDN / ブラウザキャッシュを完全に無効化
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    response.headers.set('Pragma', 'no-cache');
+
+    return response;
   } catch (error: any) {
     console.error('[credits] Error:', error?.message);
     return NextResponse.json(

@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSONWithTokens } from '@/lib/gemini';
 import { createClient } from '@/lib/supabase/server';
-import { logGenerationTokens, checkCredits, checkFreePlanLimit, type GenerationActionType } from '@/lib/credits';
+import { logGenerationTokens, checkCredits, checkFreePlanLimit, consumeCredits, type GenerationActionType } from '@/lib/credits';
 import {
   LightSlideGenerationRequest,
   LightSlideGenerationResponse,
@@ -236,7 +236,7 @@ export async function POST(
       );
     }
 
-    // クレジット残高チェック（消費はoutline側で実施済み、ここはガードのみ）
+    // クレジット残高チェック + 1クレジット消費
     if (userId) {
       const freePlanCheck = await checkFreePlanLimit(userId);
       if (!freePlanCheck.allowed) {
@@ -246,13 +246,24 @@ export async function POST(
         );
       }
       if (freePlanCheck.plan !== 'free') {
-        const creditCheck = await checkCredits(userId, 0);
-        if (creditCheck.creditsRemaining <= 0) {
+        const creditCheck = await checkCredits(userId, 1);
+        if (!creditCheck.hasCredits) {
+          console.log(`[generate-slides-v2] Insufficient credits: user=${userId}, remaining=${creditCheck.creditsRemaining}`);
           return NextResponse.json(
             { success: false, slides: [], error: '今月のクレジットを使い切りました。翌月のリセットをお待ちください。' },
             { status: 402 }
           );
         }
+
+        const consumeResult = await consumeCredits(userId, 1, sessionId);
+        if (!consumeResult.success) {
+          console.error(`[generate-slides-v2] Credit consumption failed: user=${userId}, error=${consumeResult.error}`);
+          return NextResponse.json(
+            { success: false, slides: [], error: 'クレジット消費に失敗しました。再試行してください。' },
+            { status: 500 }
+          );
+        }
+        console.log(`[generate-slides-v2] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 

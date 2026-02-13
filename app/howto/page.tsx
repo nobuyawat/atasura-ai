@@ -185,7 +185,7 @@ export default function HowtoPage() {
     <div className="min-h-screen bg-slate-950 text-white selection:bg-indigo-500 selection:text-white">
       <Header />
 
-      <main className="pt-32 pb-24 px-6 max-w-7xl mx-auto">
+      <main className="pt-[104px] lg:pt-32 pb-24 px-6 max-w-7xl mx-auto">
         {/* Page Title Area */}
         <section className="text-center mb-24 animate-in fade-in slide-in-from-bottom duration-700">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900 border border-indigo-500/40 text-indigo-300 text-xs font-bold mb-6">

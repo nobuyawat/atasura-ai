@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSONWithTokens } from '@/lib/gemini';
 import { createClient } from '@/lib/supabase/server';
-import { logGenerationTokens, checkFreePlanLimit, checkCredits, type GenerationActionType } from '@/lib/credits';
+import { logGenerationTokens, checkFreePlanLimit, checkCredits, consumeCredits, type GenerationActionType } from '@/lib/credits';
 
 // 入力の型定義
 interface ScriptRequest {
@@ -69,20 +69,36 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 有料プランのクレジット残高チェック（消費はoutline側で実施済み、ここはガードのみ）
+      // 有料プランのクレジット残高チェック + 1クレジット消費
       if (freePlanCheck.plan !== 'free') {
-        const creditCheck = await checkCredits(userId, 0);
-        if (creditCheck.creditsRemaining <= 0) {
-          console.log(`[generate-script] No credits remaining: user=${userId}`);
+        const creditCheck = await checkCredits(userId, 1);
+        if (!creditCheck.hasCredits) {
+          console.log(`[generate-script] Insufficient credits: user=${userId}, remaining=${creditCheck.creditsRemaining}`);
           return NextResponse.json(
             {
               error: '今月のクレジットを使い切りました。翌月のリセットをお待ちいただくか、上位プランへアップグレードしてください。',
               code: 'INSUFFICIENT_CREDITS',
-              credits: { remaining: 0, required: 0 },
+              credits: { remaining: creditCheck.creditsRemaining, required: 1 },
             },
             { status: 402 }
           );
         }
+
+        // クレジットを1消費（アトミック減算）
+        const consumeResult = await consumeCredits(userId, 1, sessionId);
+        if (!consumeResult.success) {
+          console.error(`[generate-script] Credit consumption failed: user=${userId}, error=${consumeResult.error}`);
+          return NextResponse.json(
+            {
+              error: consumeResult.error === 'insufficient_credits'
+                ? '今月のクレジットを使い切りました。'
+                : 'クレジット消費に失敗しました。再試行してください。',
+              code: consumeResult.error === 'insufficient_credits' ? 'INSUFFICIENT_CREDITS' : 'CREDIT_CONSUME_ERROR',
+            },
+            { status: consumeResult.error === 'insufficient_credits' ? 402 : 500 }
+          );
+        }
+        console.log(`[generate-script] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 

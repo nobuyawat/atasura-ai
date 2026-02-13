@@ -90,7 +90,7 @@ export default function PlanManagementPage() {
         setRefundForm(prev => ({ ...prev, email: user.email || '' }));
 
         // サブスクリプション情報取得
-        const res = await fetch('/api/stripe/subscription');
+        const res = await fetch('/api/stripe/subscription', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setSubscription(data);
@@ -114,7 +114,7 @@ export default function PlanManagementPage() {
 
   // サブスク情報再取得
   const refetchSubscription = async () => {
-    const res = await fetch('/api/stripe/subscription');
+    const res = await fetch('/api/stripe/subscription', { cache: 'no-store' });
     if (res.ok) {
       setSubscription(await res.json());
     }

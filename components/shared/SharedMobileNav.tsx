@@ -6,6 +6,11 @@
  * - ハンバーガーメニューは各ページヘッダーに既にあるので、ここではタブのみ
  * - usePathname() で現在ページをハイライト
  * - /app 配下（メインアプリ）では非表示
+ *
+ * レイアウト:
+ *   ヘッダー: ~56px (py-3/py-4 + content)
+ *   ナビタブ: ~40px (py-1.5 + content)
+ *   → コンテンツは各ページで pt-[100px] 以上を確保すること
  */
 
 import { usePathname } from 'next/navigation';
@@ -33,9 +38,9 @@ export const SharedMobileNav: React.FC = () => {
   }
 
   return (
-    <div className="lg:hidden fixed top-[52px] left-0 right-0 z-40 bg-[#05060f]/90 backdrop-blur-sm border-b border-white/5">
+    <div className="lg:hidden fixed top-[56px] left-0 right-0 z-40 bg-[#05060f]/95 backdrop-blur-md border-b border-white/5">
       <nav
-        className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto scrollbar-hide"
+        className="flex items-center gap-1.5 px-3 py-1.5 overflow-x-auto scrollbar-hide"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {NAV_ITEMS.map((item) => {

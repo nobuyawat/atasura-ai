@@ -31,7 +31,7 @@ export function useCreditBalance() {
 
   const fetchBalance = useCallback(async () => {
     try {
-      const res = await fetch('/api/credits');
+      const res = await fetch('/api/credits', { cache: 'no-store' });
       if (!res.ok) {
         // 認証エラーの場合は静かに無視（ログインしていない等）
         if (res.status === 401) {

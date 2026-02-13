@@ -174,7 +174,7 @@ export default function ProblemsPage() {
         ================================================================ */}
 
         {/* ===== 画像①: 話す前に、もう消耗している ===== */}
-        <section className="pt-32 md:pt-40 pb-20 md:pb-28 px-6">
+        <section className="pt-[104px] md:pt-40 pb-20 md:pb-28 px-6">
           <div className="max-w-3xl mx-auto space-y-10 md:space-y-12">
             {/* ラベル */}
             <div className="flex justify-center">

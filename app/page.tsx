@@ -75,7 +75,7 @@ const Header: React.FC = () => {
 // ヒーローセクション
 const Hero: React.FC = () => {
   return (
-    <section className="pt-28 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
+    <section className="pt-[104px] lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
       <div className="max-w-[1400px] w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
         {/* Left Column: Text Content */}

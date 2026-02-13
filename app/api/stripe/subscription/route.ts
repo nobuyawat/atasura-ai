@@ -4,11 +4,17 @@
  *
  * 認証ユーザーの現在のサブスクリプション状態を返す
  * pending_price_id → プラン名解決は環境変数ベースの逆引きマップ
+ *
+ * 注意: キャッシュ厳禁（通常/シークレット問わず常にDB最新値を返す）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getPlanFromPriceId, getPlanDisplayName } from '@/lib/plans';
+
+// Vercel / Next.js のレスポンスキャッシュを完全に無効化
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   try {
@@ -44,7 +50,7 @@ export async function GET(request: NextRequest) {
       ? getPlanFromPriceId(sub.pending_price_id)
       : null;
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       plan: sub.plan,
       planDisplayName: getPlanDisplayName(sub.plan),
       status: sub.status,
@@ -56,6 +62,12 @@ export async function GET(request: NextRequest) {
       creditsRemaining: sub.credits_remaining ?? 0,
       creditsLimit: sub.credits_limit ?? 0,
     });
+
+    // CDN / ブラウザキャッシュを完全に無効化
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    response.headers.set('Pragma', 'no-cache');
+
+    return response;
   } catch (error) {
     console.error('[Subscription] Error fetching subscription:', error);
     return NextResponse.json(

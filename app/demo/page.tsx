@@ -69,7 +69,7 @@ export default function DemoPage() {
       </header>
 
       {/* Main Content */}
-      <main className="pt-24 pb-20">
+      <main className="pt-[104px] lg:pt-24 pb-20">
         <div className="max-w-6xl mx-auto px-6">
           {/* Hero Context (Mini) */}
           <div className="text-center mb-16 pt-10">

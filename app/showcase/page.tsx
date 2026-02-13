@@ -165,7 +165,7 @@ export default function ShowcasePage() {
         </div>
       </header>
 
-      <main className="flex-grow pt-32 pb-20">
+      <main className="flex-grow pt-[104px] lg:pt-32 pb-20">
         {/* Hero / Heading Section */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-20">
           <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full mb-6">
