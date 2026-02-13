@@ -21,6 +21,45 @@ import { resolvePlanFromPrice, getPlanFromPriceId, PLAN_CREDITS } from '@/lib/pl
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
+/**
+ * Unix タイムスタンプ（秒）を ISO 文字列に安全に変換するヘルパー
+ * Stripe API バージョンによって current_period_start/end が
+ * undefined や null になる場合があるため、ガード付きで変換する。
+ */
+function safeTimestamp(ts: number | null | undefined): string {
+  if (ts == null || isNaN(ts)) {
+    return new Date().toISOString(); // フォールバック: 現在時刻
+  }
+  return new Date(ts * 1000).toISOString();
+}
+
+/**
+ * Subscription オブジェクトから current_period_start / end を安全に取得
+ * Stripe 2025-11-17.clover 以降では items.data[0] にある場合がある
+ */
+function getPeriodFromSubscription(subscription: Stripe.Subscription): {
+  periodStart: string;
+  periodEnd: string;
+} {
+  // まずトップレベルを試す
+  let start = (subscription as any).current_period_start;
+  let end = (subscription as any).current_period_end;
+
+  // トップレベルになければ items.data[0] から取得
+  if (start == null || end == null) {
+    const item = subscription.items?.data?.[0];
+    if (item) {
+      start = start ?? (item as any).current_period_start;
+      end = end ?? (item as any).current_period_end;
+    }
+  }
+
+  return {
+    periodStart: safeTimestamp(start),
+    periodEnd: safeTimestamp(end),
+  };
+}
+
 export async function POST(request: NextRequest) {
   console.log('[Webhook] ====== Incoming request ======');
   try {
@@ -153,11 +192,12 @@ async function handleCheckoutCompleted(
   // サブスクリプション詳細を取得
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   const { priceId, plan } = resolvePlanFromSubscription(subscription);
+  const { periodStart, periodEnd } = getPeriodFromSubscription(subscription);
 
   // クレジット上限を算出
   const creditLimit = PLAN_CREDITS[plan] || 0;
 
-  console.log('[Webhook][Checkout] Resolved:', { priceId, plan, creditLimit, status: subscription.status });
+  console.log('[Webhook][Checkout] Resolved:', { priceId, plan, creditLimit, status: subscription.status, periodStart, periodEnd });
 
   // DB に保存（クレジット初期化付き）
   const upsertData = {
@@ -167,8 +207,8 @@ async function handleCheckoutCompleted(
     price_id: priceId,
     plan: plan,
     status: subscription.status,
-    current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-    current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+    current_period_start: periodStart,
+    current_period_end: periodEnd,
     cancel_at_period_end: subscription.cancel_at_period_end,
     pending_price_id: null,
     credits_limit: creditLimit,
@@ -212,6 +252,7 @@ async function handleSubscriptionUpdate(
   }
 
   const { priceId, plan } = resolvePlanFromSubscription(subscription);
+  const { periodStart, periodEnd } = getPeriodFromSubscription(subscription);
 
   // 現在の DB 状態を取得して、実際にプランが変わったか判定
   const { data: currentSub } = await supabase
@@ -231,8 +272,8 @@ async function handleSubscriptionUpdate(
     price_id: priceId,
     plan: plan,
     status: subscription.status,
-    current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-    current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+    current_period_start: periodStart,
+    current_period_end: periodEnd,
     cancel_at_period_end: subscription.cancel_at_period_end,
     updated_at: new Date().toISOString(),
   };
@@ -349,13 +390,14 @@ async function handleRenewalPayment(
   }
 
   const { priceId, plan } = resolvePlanFromSubscription(subscription);
+  const { periodStart, periodEnd } = getPeriodFromSubscription(subscription);
   const creditLimit = PLAN_CREDITS[plan] || 0;
 
   const { error } = await supabase
     .from('subscriptions')
     .update({
-      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_start: periodStart,
+      current_period_end: periodEnd,
       price_id: priceId,
       plan: plan,
       status: 'active',
