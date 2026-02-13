@@ -15,6 +15,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
+  /* iPhone Safe Area 対応 */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ============================================
@@ -307,4 +311,64 @@ textarea::placeholder {
   font-size: 0.85em;
   font-weight: 400;
   color: #64748b;
+}
+
+/* ============================================
+   モバイル パフォーマンス最適化
+   backdrop-filter / blur / drop-shadow を
+   モバイルで軽量化し、GPU負荷を削減
+   ============================================ */
+
+@media (max-width: 767px) {
+  /* 巨大な背景ブラーを無効化（blur-[120px] 相当） */
+  .bg-blur-decoration {
+    display: none !important;
+  }
+
+  /* backdrop-blur を軽量化 */
+  [class*="backdrop-blur-md"] {
+    -webkit-backdrop-filter: blur(4px) !important;
+    backdrop-filter: blur(4px) !important;
+  }
+  [class*="backdrop-blur-sm"] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  /* drop-shadow を無効化（テキストのグロー） */
+  [class*="drop-shadow-"] {
+    filter: none !important;
+  }
+
+  /* 重い box-shadow を軽量化 */
+  [class*="shadow-2xl"] {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+  }
+
+  /* hover アニメーションを無効化（タッチデバイスでは不要） */
+  .group:hover .group-hover\:scale-\[1\.02\] {
+    transform: none !important;
+  }
+  .group:hover .group-hover\:-translate-y-2 {
+    transform: none !important;
+  }
+
+  /* text-glow を軽量化 */
+  .text-glow-yellow {
+    text-shadow: none;
+  }
+}
+
+/* タップ反応速度の改善 */
+a, button, [role="button"], input, select, textarea {
+  touch-action: manipulation; /* ダブルタップズーム無効 → 300ms遅延を除去 */
+}
+
+/* prefers-reduced-motion 対応 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

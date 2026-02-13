@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ThumbnailStack } from '@/components/lp/ThumbnailStack';
 import { StatusCard } from '@/components/lp/StatusCard';
+import { MobileMenu } from '@/components/lp/MobileMenu';
 
 // ナビゲーションリンクコンポーネント
 const NavLink: React.FC<{ href: string; icon: React.ReactNode; text: string }> = ({ href, icon, text }) => (
@@ -31,7 +32,7 @@ const NavLink: React.FC<{ href: string; icon: React.ReactNode; text: string }> =
 // ヘッダーコンポーネント
 const Header: React.FC = () => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center py-3 lg:py-6 px-4">
+    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center py-3 lg:py-6 px-4 bg-[#05060f]/80 backdrop-blur-md border-b border-white/5 lg:bg-transparent lg:backdrop-blur-none lg:border-b-0">
       <div className="max-w-[1400px] w-full flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3">
@@ -44,7 +45,7 @@ const Header: React.FC = () => {
           </div>
         </Link>
 
-        {/* Navigation */}
+        {/* Desktop Navigation */}
         <nav className="hidden lg:flex items-center gap-2 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl px-3 py-1.5">
           <NavLink href="/showcase" icon={<Eye size={16} />} text="実例" />
           <NavLink href="/problems" icon={<MessageSquare size={16} />} text="よくあるお悩み" />
@@ -60,11 +61,17 @@ const Header: React.FC = () => {
           </Link>
         </nav>
 
-        {/* CTA Button */}
-        <Link href="/login" className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-95 group">
-          <span>無料で始める</span>
-          <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-        </Link>
+        {/* Right side: CTA + Mobile Menu */}
+        <div className="flex items-center gap-2">
+          {/* CTA Button */}
+          <Link href="/login" className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-95 group">
+            <span>無料で始める</span>
+            <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+
+          {/* Mobile Hamburger Menu */}
+          <MobileMenu />
+        </div>
       </div>
     </header>
   );
@@ -205,9 +212,9 @@ export default function LandingPage() {
         <Announcements />
       </main>
 
-      {/* Decorative background elements */}
-      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-900/10 blur-[120px] rounded-full -z-10" />
-      <div className="absolute top-[20%] right-[-5%] w-[30%] h-[30%] bg-purple-900/10 blur-[120px] rounded-full -z-10" />
+      {/* Decorative background elements — hidden on mobile via CSS for performance */}
+      <div className="bg-blur-decoration absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-900/10 blur-[120px] rounded-full -z-10" />
+      <div className="bg-blur-decoration absolute top-[20%] right-[-5%] w-[30%] h-[30%] bg-purple-900/10 blur-[120px] rounded-full -z-10" />
 
       {/* Footer / Scroll indicator */}
       <div className="py-8 flex flex-col items-center gap-2 opacity-50">

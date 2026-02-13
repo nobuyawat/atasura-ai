@@ -11,6 +11,7 @@ import Image from 'next/image';
  * - タイマーは1本のみ（useRef + 二重起動ガード）
  * - フェードはCSSに任せる（isTransitioning状態を廃止）
  * - 依存配列は空（状態変化でタイマー再作成しない）
+ * - モバイルでは画像枚数を削減し、切替間隔を延ばす
  */
 
 // Hero画像のパス（コンポーネント外で固定 - レンダーごとに再生成しない）
@@ -22,16 +23,27 @@ const HERO_IMAGES = [
   '/hero/05_考えの続き_AIプレゼン.png',
 ];
 
-// ローテーション間隔（ミリ秒）
-const SLIDE_MS = 3000;
+// モバイル用（最初の2枚のみ使用 — GPU負荷軽減）
+const HERO_IMAGES_MOBILE = HERO_IMAGES.slice(0, 2);
 
 export const ThumbnailStack: React.FC = () => {
   const [index, setIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
   const timerRef = useRef<number | null>(null);
+
+  // モバイル判定（768px以下）
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    // リサイズ時の再判定は不要（初回のみ）
+  }, []);
+
+  const images = isMobile ? HERO_IMAGES_MOBILE : HERO_IMAGES;
+  const slideMs = isMobile ? 5000 : 3000; // モバイルは5秒間隔
 
   // ===== index更新は この tick() のみ =====
   const tick = () => {
-    setIndex((prev) => (prev + 1) % HERO_IMAGES.length);
+    setIndex((prev) => (prev + 1) % (isMobile ? HERO_IMAGES_MOBILE.length : HERO_IMAGES.length));
   };
 
   // タイマー停止
@@ -44,16 +56,14 @@ export const ThumbnailStack: React.FC = () => {
 
   // タイマー開始（二重起動ガード付き）
   const start = () => {
-    if (timerRef.current !== null) return; // 既に動いていたら何もしない
-    timerRef.current = window.setInterval(tick, SLIDE_MS);
+    if (timerRef.current !== null) return;
+    timerRef.current = window.setInterval(tick, slideMs);
   };
 
   // メインのuseEffect - 依存配列は空
   useEffect(() => {
-    // 初回開始
     start();
 
-    // visibilitychange ハンドラー
     const onVisibilityChange = () => {
       if (document.hidden) {
         stop();
@@ -64,13 +74,12 @@ export const ThumbnailStack: React.FC = () => {
 
     document.addEventListener('visibilitychange', onVisibilityChange);
 
-    // クリーンアップ
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 依存配列は空 - 状態変化でタイマーを再作成しない
+  }, [isMobile]); // isMobile変更時にタイマーを再起動
 
   return (
     <div className="relative w-full max-w-[640px] aspect-[16/9] group cursor-pointer overflow-visible">
@@ -79,12 +88,12 @@ export const ThumbnailStack: React.FC = () => {
       <div className="hidden sm:block absolute top-[-8%] right-[-5%] w-[95%] h-full bg-purple-900/40 rounded-3xl -rotate-3 blur-[1px] opacity-60 scale-95 border border-white/10" />
 
       {/* Main card */}
-      <div className="relative w-full h-full bg-[#1e1f2b] rounded-3xl overflow-hidden border-4 border-white/10 shadow-2xl shadow-black/50 transition-transform duration-500 group-hover:scale-[1.02] group-hover:-translate-y-2">
-        {/* 全画像を重ねて配置し、CSSでフェード切替 */}
-        {HERO_IMAGES.map((src, i) => (
+      <div className="relative w-full h-full bg-[#1e1f2b] rounded-2xl sm:rounded-3xl overflow-hidden border-2 sm:border-4 border-white/10 shadow-lg sm:shadow-2xl shadow-black/50 sm:transition-transform sm:duration-500 sm:group-hover:scale-[1.02] sm:group-hover:-translate-y-2">
+        {/* 表示する画像のみレンダリング */}
+        {images.map((src, i) => (
           <div
             key={src}
-            className="absolute inset-0 transition-opacity duration-700 ease-in-out"
+            className="absolute inset-0 transition-opacity duration-700 ease-in-out will-change-[opacity]"
             style={{ opacity: i === index ? 1 : 0 }}
           >
             <Image
@@ -93,21 +102,22 @@ export const ThumbnailStack: React.FC = () => {
               fill
               className="object-cover"
               priority={i === 0}
-              sizes="(max-width: 768px) 100vw, 640px"
+              loading={i === 0 ? 'eager' : 'lazy'}
+              sizes="(max-width: 768px) 90vw, 640px"
             />
           </div>
         ))}
 
         {/* Progress indicators */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-          {HERO_IMAGES.map((_, i) => (
+        <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+          {images.map((_, i) => (
             <div
               key={i}
               className={`
-                h-2 rounded-full transition-all duration-300
+                h-1.5 sm:h-2 rounded-full transition-all duration-300
                 ${i === index
-                  ? 'bg-white w-6'
-                  : 'bg-white/40 w-2 hover:bg-white/60'}
+                  ? 'bg-white w-5 sm:w-6'
+                  : 'bg-white/40 w-1.5 sm:w-2'}
               `}
             />
           ))}
@@ -117,9 +127,9 @@ export const ThumbnailStack: React.FC = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent pointer-events-none" />
       </div>
 
-      {/* Subtext */}
-      <p className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-gray-500 text-sm font-medium tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
-        {HERO_IMAGES.length}枚の画像を自動表示中
+      {/* Subtext - hidden on mobile */}
+      <p className="hidden sm:block absolute -bottom-10 left-1/2 -translate-x-1/2 text-gray-500 text-sm font-medium tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+        {images.length}枚の画像を自動表示中
       </p>
     </div>
   );
