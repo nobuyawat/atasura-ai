@@ -25,17 +25,26 @@ interface PricingPlan {
   description: string;
   price: string;
   period: string;
+  /** メイン訴求: 動画本数ベース (例: "5分動画 5本以上 作成可能") */
   usageLimit: string;
+  /** 動画本数の数値部分 (アクセントカラー用) */
+  videoCount?: string;
+  /** クレジット表示 (小さくバッジ風) */
+  creditBadge?: string;
   features: PricingFeature[];
   recommendation?: string;
   subNote?: string;
   cardFootNote?: string;
+  /** 有料プラン共通の注意書き */
+  pricingDisclaimer?: string;
   ctaText: string;
   isPopular?: boolean;
   isFree?: boolean;
 }
 
 // Plans Data
+const PAID_DISCLAIMER = '※5分動画＝骨子＋台本＋画像生成の標準構成を基準とした目安です。';
+
 const PLANS: PricingPlan[] = [
   {
     id: 'free',
@@ -62,15 +71,16 @@ const PLANS: PricingPlan[] = [
     description: 'AIを初めて使う人に',
     price: '500',
     period: '/ 月',
-    usageLimit: '30クレジット',
+    usageLimit: '5分動画 5本以上 作成可能',
+    videoCount: '5本以上',
+    creditBadge: '30クレジット',
     ctaText: '申し込む',
     recommendation: '短いプレゼン・社内共有・練習用に最適',
-    subNote: '5分台本 × 2本目安',
-    cardFootNote: '※持ち込み（原稿＋画像）用のテンプレートとして活用できます。',
+    pricingDisclaimer: PAID_DISCLAIMER,
     features: [
-      { text: '5分程度の台本を複数作成', isAvailable: true },
-      { text: 'スライド生成（少量）', isAvailable: true },
-      { text: '※テンプレート無制限利用', isAvailable: true },
+      { text: '5分台本を複数作成', isAvailable: true },
+      { text: 'スライド生成（小量）', isAvailable: true },
+      { text: 'テンプレート無制限利用', isAvailable: true },
       { text: '軽い修正OK', isAvailable: true },
       { text: '商用利用不可', isAvailable: false },
     ]
@@ -82,16 +92,17 @@ const PLANS: PricingPlan[] = [
     description: '一番選ばれている標準プラン',
     price: '990',
     period: '/ 月',
-    usageLimit: '300クレジット',
+    usageLimit: '5分動画 50本以上 作成可能',
+    videoCount: '50本以上',
+    creditBadge: '300クレジット',
     ctaText: '申し込む',
     isPopular: true,
     recommendation: 'プレゼン・講座資料・副業に',
-    subNote: '5分台本 × 25〜30本目安',
-    cardFootNote: '※持ち込み（原稿＋画像）用のテンプレートとして活用できます。',
+    pricingDisclaimer: PAID_DISCLAIMER,
     features: [
-      { text: '5分台本を25〜30本分', isAvailable: true, highlight: true },
-      { text: 'スライド生成 (10〜20枚を複数回)', isAvailable: true },
-      { text: '※テンプレート無制限利用', isAvailable: true },
+      { text: '5分動画を大量作成', isAvailable: true, highlight: true },
+      { text: 'スライド生成（複数回）', isAvailable: true },
+      { text: 'テンプレート無制限利用', isAvailable: true },
       { text: '修正・再生成OK', isAvailable: true },
       { text: '商用利用OK', isAvailable: true },
     ]
@@ -103,15 +114,16 @@ const PLANS: PricingPlan[] = [
     description: '仕事でガッツリ使う方向け',
     price: '1,980',
     period: '/ 月',
-    usageLimit: '600クレジット',
+    usageLimit: '5分動画 100本以上 作成可能',
+    videoCount: '100本以上',
+    creditBadge: '600クレジット',
     ctaText: '申し込む',
     recommendation: '継続的な制作・仕事利用向け',
-    subNote: '5分台本 × 50〜60本目安',
-    cardFootNote: '※持ち込み（原稿＋画像）用のテンプレートとして活用できます。',
+    pricingDisclaimer: PAID_DISCLAIMER,
     features: [
       { text: '長時間台本にも対応', isAvailable: true, highlight: true },
       { text: 'スライド大量生成', isAvailable: true },
-      { text: '※テンプレート無制限利用', isAvailable: true },
+      { text: 'テンプレート無制限利用', isAvailable: true },
       { text: '優先生成システム', isAvailable: true },
       { text: '商用利用OK', isAvailable: true },
     ]
@@ -195,18 +207,41 @@ const PricingCard = ({ plan, onSelect, isLoading }: { plan: PricingPlan; onSelec
             <span className="text-sm font-bold opacity-40 mb-1 group-hover:opacity-60">{plan.period}</span>
           </div>
 
-          <div className={`mt-4 inline-block px-5 py-2 rounded-full text-sm font-black ring-1 transition-all duration-300 ${
-            plan.isPopular
-              ? `bg-pink-500/20 ${theme.accent} ring-pink-500/40 group-hover:bg-pink-500/30 group-hover:ring-pink-500/60`
-              : `bg-white/5 text-gray-300 ring-white/10 group-hover:bg-white/10 group-hover:ring-white/30`
-          }`}>
-            {plan.usageLimit}
-          </div>
+          {/* Video-count main display (paid plans) or credit display (free) */}
+          {plan.videoCount ? (
+            <div className="mt-4 space-y-2.5">
+              {/* Main: Video count - stacked layout */}
+              <div className={`inline-flex flex-col items-center px-5 py-3 rounded-2xl ring-1 transition-all duration-300 ${
+                plan.isPopular
+                  ? `bg-pink-500/20 ring-pink-500/40 group-hover:bg-pink-500/30 group-hover:ring-pink-500/60`
+                  : `bg-white/5 ring-white/10 group-hover:bg-white/10 group-hover:ring-white/30`
+              }`}>
+                <span className="text-gray-400 text-[11px] font-bold">5分動画</span>
+                <span className={`text-xl font-black leading-tight ${theme.accent}`}>{plan.videoCount}</span>
+                <span className="text-white font-black text-xs">作成可能</span>
+              </div>
 
-          {plan.subNote && (
-            <div className="mt-2 text-[10px] font-bold leading-tight opacity-40 text-gray-400 group-hover:opacity-100 transition-all duration-300 group-hover:text-white">
-              {plan.subNote}
+              {/* Sub: Credit badge */}
+              {plan.creditBadge && (
+                <div className="flex justify-center">
+                  <span className="inline-block px-3 py-1 rounded-full text-[11px] font-bold bg-white/5 text-gray-400 ring-1 ring-white/10 group-hover:text-gray-300 transition-colors">
+                    {plan.creditBadge}
+                  </span>
+                </div>
+              )}
             </div>
+          ) : (
+            <>
+              <div className={`mt-4 inline-block px-5 py-2 rounded-full text-sm font-black ring-1 transition-all duration-300 bg-white/5 text-gray-300 ring-white/10 group-hover:bg-white/10 group-hover:ring-white/30`}>
+                {plan.usageLimit}
+              </div>
+
+              {plan.subNote && (
+                <div className="mt-2 text-[10px] font-bold leading-tight opacity-40 text-gray-400 group-hover:opacity-100 transition-all duration-300 group-hover:text-white">
+                  {plan.subNote}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -278,6 +313,13 @@ const PricingCard = ({ plan, onSelect, isLoading }: { plan: PricingPlan; onSelec
         {plan.cardFootNote && (
           <p className="mt-3 text-[11px] text-[rgba(255,255,255,0.75)] text-center leading-relaxed">
             {plan.cardFootNote}
+          </p>
+        )}
+
+        {/* 有料プラン共通の注意書き */}
+        {plan.pricingDisclaimer && (
+          <p className="mt-3 text-[10px] text-gray-500 text-center leading-relaxed">
+            {plan.pricingDisclaimer}
           </p>
         )}
       </div>
