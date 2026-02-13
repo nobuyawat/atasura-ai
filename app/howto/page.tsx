@@ -149,7 +149,7 @@ const StepCard = ({ step }: { step: Step }) => {
 // Header Component
 const Header = () => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center bg-slate-950/80 backdrop-blur-md border-b border-white/5">
+    <header className="hidden lg:flex fixed top-0 left-0 right-0 z-50 px-6 py-4 justify-between items-center bg-slate-950/80 backdrop-blur-md border-b border-white/5">
       <Link href="/" className="flex items-center gap-3">
         <div className="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
           <span className="text-white font-bold text-xl">ア</span>
@@ -185,7 +185,7 @@ export default function HowtoPage() {
     <div className="min-h-screen bg-slate-950 text-white selection:bg-indigo-500 selection:text-white">
       <Header />
 
-      <main className="pt-[104px] lg:pt-32 pb-24 px-6 max-w-7xl mx-auto">
+      <main className="pt-6 lg:pt-32 pb-24 px-6 max-w-7xl mx-auto">
         {/* Page Title Area */}
         <section className="text-center mb-24 animate-in fade-in slide-in-from-bottom duration-700">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900 border border-indigo-500/40 text-indigo-300 text-xs font-bold mb-6">

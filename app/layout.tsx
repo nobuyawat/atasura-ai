@@ -1,8 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { SharedMobileNav } from '@/components/shared/SharedMobileNav';
-import { SharedMobileMenu } from '@/components/shared/SharedMobileMenu';
+import { SharedMobileHeader } from '@/components/shared/SharedMobileHeader';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -32,8 +31,9 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className={inter.className}>
-        <SharedMobileNav />
-        <SharedMobileMenu />
+        {/* モバイル統合ヘッダー（sticky: ロゴ + ナビタブ + ハンバーガー）
+            lg以上では非表示。各ページ固有のヘッダーが表示される。 */}
+        <SharedMobileHeader />
         {children}
       </body>
     </html>

@@ -323,7 +323,7 @@ const TrustMarkers = () => {
 // Header Component
 const Header = () => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center bg-[#05060f]/80 backdrop-blur-md border-b border-white/5">
+    <header className="hidden lg:flex fixed top-0 left-0 right-0 z-50 px-6 py-4 justify-between items-center bg-[#05060f]/80 backdrop-blur-md border-b border-white/5">
       <Link href="/" className="flex items-center gap-3">
         <div className="w-10 h-10 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/20">
           <span className="text-white font-bold text-xl">ア</span>
@@ -424,7 +424,7 @@ export default function PricingPage() {
 
       <Header />
 
-      <main className="w-full max-w-7xl px-6 pt-[104px] lg:pt-40 pb-20 z-10">
+      <main className="w-full max-w-7xl px-6 pt-6 lg:pt-40 pb-20 z-10">
         {/* Hero Section */}
         <section className="text-center mb-20 space-y-6">
           <div className="inline-flex items-center gap-2 bg-pink-500/10 border border-pink-500/20 text-pink-400 px-5 py-2 rounded-full text-sm font-black tracking-wide">

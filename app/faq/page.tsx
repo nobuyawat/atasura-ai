@@ -368,7 +368,7 @@ const FAQCard = ({ item }: { item: FAQItem }) => {
 // Navigation Component
 const Navigation = () => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center bg-[#05060f]/80 backdrop-blur-md border-b border-white/5">
+    <header className="hidden lg:flex fixed top-0 left-0 right-0 z-50 px-6 py-4 justify-between items-center bg-[#05060f]/80 backdrop-blur-md border-b border-white/5">
       <Link href="/" className="flex items-center gap-3">
         <div className="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
           <span className="text-white font-bold text-xl">ア</span>
@@ -405,7 +405,7 @@ export default function FaqPage() {
       <Navigation />
 
       {/* Hero Section */}
-      <section className="pt-[104px] lg:pt-40 pb-20 px-6">
+      <section className="pt-6 lg:pt-40 pb-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold mb-6">
             <HelpCircleIcon className="w-3 h-3" />

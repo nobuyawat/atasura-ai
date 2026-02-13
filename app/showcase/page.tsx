@@ -114,7 +114,7 @@ export default function ShowcasePage() {
   return (
     <div className="min-h-screen flex flex-col bg-[#05070a] text-white selection:bg-indigo-500/30">
       {/* Header */}
-      <header className="fixed top-0 left-0 w-full z-50 bg-[#05070a]/80 backdrop-blur-md border-b border-white/10">
+      <header className="hidden lg:block fixed top-0 left-0 w-full z-50 bg-[#05070a]/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
@@ -165,7 +165,7 @@ export default function ShowcasePage() {
         </div>
       </header>
 
-      <main className="flex-grow pt-[104px] lg:pt-32 pb-20">
+      <main className="flex-grow pt-6 lg:pt-32 pb-20">
         {/* Hero / Heading Section */}
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-20">
           <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/5 border border-white/10 rounded-full mb-6">

@@ -174,7 +174,7 @@ export default function VoicesPage() {
   return (
     <div className="min-h-screen bg-[#05070A]">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center bg-[#05070A]/80 backdrop-blur-md border-b border-white/5">
+      <header className="hidden lg:flex fixed top-0 left-0 right-0 z-50 px-6 py-4 justify-between items-center bg-[#05070A]/80 backdrop-blur-md border-b border-white/5">
         <Link href="/" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-tr from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
             <span className="text-white font-bold text-xl">ア</span>
@@ -204,7 +204,7 @@ export default function VoicesPage() {
       </header>
 
       {/* Page Content */}
-      <main className="relative pt-[104px] lg:pt-32 pb-20">
+      <main className="relative pt-6 lg:pt-32 pb-20">
         {/* Background Decorative Element */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-screen-xl h-[600px] pointer-events-none">
           <div className="absolute top-20 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 blur-[120px] rounded-full"></div>

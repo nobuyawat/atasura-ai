@@ -31,7 +31,7 @@ const NavLink: React.FC<{ href: string; icon: React.ReactNode; text: string }> =
 // ヘッダーコンポーネント
 const Header: React.FC = () => {
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center py-3 lg:py-6 px-4 bg-[#05060f]/80 backdrop-blur-md border-b border-white/5 lg:bg-transparent lg:backdrop-blur-none lg:border-b-0">
+    <header className="hidden lg:flex fixed top-0 left-0 right-0 z-50 justify-center py-3 lg:py-6 px-4 bg-[#05060f]/80 backdrop-blur-md border-b border-white/5 lg:bg-transparent lg:backdrop-blur-none lg:border-b-0">
       <div className="max-w-[1400px] w-full flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3">
@@ -75,7 +75,7 @@ const Header: React.FC = () => {
 // ヒーローセクション
 const Hero: React.FC = () => {
   return (
-    <section className="pt-[104px] lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
+    <section className="pt-6 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
       <div className="max-w-[1400px] w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
         {/* Left Column: Text Content */}

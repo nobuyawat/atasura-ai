@@ -51,7 +51,7 @@ export default function DemoPage() {
   return (
     <div className="min-h-screen bg-[#0B0E14] text-white">
       {/* Header / Navigation Bar */}
-      <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex justify-between items-center glass-card border-b border-white/5">
+      <header className="hidden lg:flex fixed top-0 left-0 right-0 z-50 px-6 py-4 justify-between items-center glass-card border-b border-white/5">
         <Link href="/" className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-tr from-[#FF3B6B] to-[#7C3AED] rounded-lg flex items-center justify-center font-bold text-lg italic">A</div>
           <span className="font-bold text-xl tracking-tight">アタスラAI <span className="text-xs text-gray-400 ml-1">デモ版</span></span>
@@ -69,7 +69,7 @@ export default function DemoPage() {
       </header>
 
       {/* Main Content */}
-      <main className="pt-[104px] lg:pt-24 pb-20">
+      <main className="pt-6 lg:pt-24 pb-20">
         <div className="max-w-6xl mx-auto px-6">
           {/* Hero Context (Mini) */}
           <div className="text-center mb-16 pt-10">
