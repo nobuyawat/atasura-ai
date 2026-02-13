@@ -314,6 +314,18 @@ textarea::placeholder {
 }
 
 /* ============================================
+   スクロールバー非表示（横スクロールナビ用）
+   ============================================ */
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
    モバイル パフォーマンス最適化
    backdrop-filter / blur / drop-shadow を
    モバイルで軽量化し、GPU負荷を削減

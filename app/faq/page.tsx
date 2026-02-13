@@ -163,7 +163,7 @@ interface AnnouncementItem {
 const ANNOUNCEMENTS: AnnouncementItem[] = [
   {
     id: 'a1',
-    date: '○月○日',
+    date: '2月15日',
     content: 'アタスラAIをローンチしました。',
   },
 ];

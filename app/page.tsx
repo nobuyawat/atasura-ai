@@ -20,6 +20,7 @@ import {
 import { ThumbnailStack } from '@/components/lp/ThumbnailStack';
 import { StatusCard } from '@/components/lp/StatusCard';
 import { MobileMenu } from '@/components/lp/MobileMenu';
+import { MobileNavTabs } from '@/components/lp/MobileNavTabs';
 
 // ナビゲーションリンクコンポーネント
 const NavLink: React.FC<{ href: string; icon: React.ReactNode; text: string }> = ({ href, icon, text }) => (
@@ -80,7 +81,7 @@ const Header: React.FC = () => {
 // ヒーローセクション
 const Hero: React.FC = () => {
   return (
-    <section className="pt-20 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
+    <section className="pt-24 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
       <div className="max-w-[1400px] w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
         {/* Left Column: Text Content */}
@@ -173,7 +174,7 @@ const Hero: React.FC = () => {
 // お知らせセクション
 const Announcements: React.FC = () => {
   const items = [
-    { id: 'a1', date: '○月○日', content: 'アタスラAIをローンチしました。' },
+    { id: 'a1', date: '2月15日', content: 'アタスラAIをローンチしました。' },
   ];
 
   return (
@@ -207,6 +208,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-main relative overflow-x-hidden">
       <Header />
+      <MobileNavTabs />
       <main>
         <Hero />
         <Announcements />
