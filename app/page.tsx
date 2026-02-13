@@ -19,8 +19,6 @@ import {
 } from 'lucide-react';
 import { ThumbnailStack } from '@/components/lp/ThumbnailStack';
 import { StatusCard } from '@/components/lp/StatusCard';
-import { MobileMenu } from '@/components/lp/MobileMenu';
-import { MobileNavTabs } from '@/components/lp/MobileNavTabs';
 
 // ナビゲーションリンクコンポーネント
 const NavLink: React.FC<{ href: string; icon: React.ReactNode; text: string }> = ({ href, icon, text }) => (
@@ -62,16 +60,12 @@ const Header: React.FC = () => {
           </Link>
         </nav>
 
-        {/* Right side: CTA + Mobile Menu */}
+        {/* Right side: CTA (モバイルでは非表示 — 共通ハンバーガーメニュー内に配置) */}
         <div className="flex items-center gap-2">
-          {/* CTA Button */}
-          <Link href="/login" className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-95 group">
+          <Link href="/login" className="hidden lg:flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-600/20 active:scale-95 group">
             <span>無料で始める</span>
             <ChevronRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
           </Link>
-
-          {/* Mobile Hamburger Menu */}
-          <MobileMenu />
         </div>
       </div>
     </header>
@@ -81,7 +75,7 @@ const Header: React.FC = () => {
 // ヒーローセクション
 const Hero: React.FC = () => {
   return (
-    <section className="pt-24 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
+    <section className="pt-28 lg:pt-28 pb-12 lg:pb-20 px-4 sm:px-6 flex justify-center min-h-[80vh] lg:min-h-screen">
       <div className="max-w-[1400px] w-full grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
         {/* Left Column: Text Content */}
@@ -208,7 +202,6 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-main relative overflow-x-hidden">
       <Header />
-      <MobileNavTabs />
       <main>
         <Hero />
         <Announcements />

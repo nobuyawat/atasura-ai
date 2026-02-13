@@ -343,7 +343,8 @@ const Header = () => {
         <Link href="/faq" className="px-4 py-2 text-sm text-gray-300 hover:text-white rounded-full transition-colors">よくある質問</Link>
       </nav>
 
-      <Link href="/login" className="bg-pink-500 hover:bg-pink-400 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-pink-500/20 flex items-center gap-2 transition-all active:scale-95">
+      {/* CTA（モバイルでは共通ハンバーガーメニュー内に配置） */}
+      <Link href="/login" className="hidden lg:flex bg-pink-500 hover:bg-pink-400 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-pink-500/20 items-center gap-2 transition-all active:scale-95">
         <span>無料で始める</span>
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />

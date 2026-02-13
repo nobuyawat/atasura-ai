@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { SharedMobileNav } from '@/components/shared/SharedMobileNav';
+import { SharedMobileMenu } from '@/components/shared/SharedMobileMenu';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -29,7 +31,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <SharedMobileNav />
+        <SharedMobileMenu />
+        {children}
+      </body>
     </html>
   );
 }

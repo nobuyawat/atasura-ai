@@ -152,9 +152,9 @@ export default function ShowcasePage() {
             </Link>
           </nav>
 
-          {/* CTA */}
-          <div className="flex items-center space-x-4">
-            <Link href="/login" className="hidden sm:block text-gray-400 hover:text-white text-sm font-medium transition-colors">
+          {/* CTA（モバイルでは共通ハンバーガーメニュー内に配置） */}
+          <div className="hidden lg:flex items-center space-x-4">
+            <Link href="/login" className="text-gray-400 hover:text-white text-sm font-medium transition-colors">
               ログイン
             </Link>
             <Link href="/login" className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-indigo-600/30 flex items-center space-x-2 transition-all active:scale-95">

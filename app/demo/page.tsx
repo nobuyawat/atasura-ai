@@ -56,9 +56,10 @@ export default function DemoPage() {
           <div className="w-8 h-8 bg-gradient-to-tr from-[#FF3B6B] to-[#7C3AED] rounded-lg flex items-center justify-center font-bold text-lg italic">A</div>
           <span className="font-bold text-xl tracking-tight">アタスラAI <span className="text-xs text-gray-400 ml-1">デモ版</span></span>
         </Link>
+        {/* CTA（モバイルでは共通ハンバーガーメニュー内に配置） */}
         <Link
           href="/login"
-          className="bg-white/10 hover:bg-white/20 transition-colors text-white px-6 py-2 rounded-full text-sm font-bold flex items-center"
+          className="hidden lg:flex bg-white/10 hover:bg-white/20 transition-colors text-white px-6 py-2 rounded-full text-sm font-bold items-center"
         >
           今すぐ試す
           <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
