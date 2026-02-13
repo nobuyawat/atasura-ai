@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
+import { getBaseUrl } from '@/lib/url';
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Portal セッション作成
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = getBaseUrl();
 
     const session = await stripe.billingPortal.sessions.create({
       customer: sub.stripe_customer_id,

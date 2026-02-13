@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { getPriceIdForPlan } from '@/lib/plans';
 import { createClient } from '@/lib/supabase/server';
+import { getBaseUrl } from '@/lib/url';
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,8 +48,8 @@ export async function POST(request: NextRequest) {
       .eq('user_id', userId)
       .single();
 
-    // ベースURL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    // ベースURL（lib/url.ts で統一解決）
+    const baseUrl = getBaseUrl();
 
     // Checkout Session パラメータ
     const sessionParams: Record<string, any> = {
