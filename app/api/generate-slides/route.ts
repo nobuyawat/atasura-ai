@@ -320,7 +320,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
       const result = resultWithTokens.data;
       console.log('[generate-slides] Generated slides count:', result.slides?.length || 0);
 
-      // トークンログ保存（スライドテキスト生成分）
+      // トークン使用量ログ（Vercel Logs用 構造化出力）
+      console.log(`[generate-slides] Token usage: user=${userId || 'anon'}, route=generate-slides(chapter), prompt_tokens=${resultWithTokens.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${resultWithTokens.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${resultWithTokens.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${resultWithTokens.durationMs}`);
+
+      // トークンログ保存（スライドテキスト生成分 → Supabase generation_logs）
       if (userId) {
         logGenerationTokens({
           sessionId: sessionId || undefined,
@@ -401,7 +404,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
       const result = resultWithTokens.data;
       console.log('[generate-slides] Generated slides count:', result.slides?.length || 0);
 
-      // トークンログ保存（スライドテキスト生成分）
+      // トークン使用量ログ（Vercel Logs用 構造化出力）
+      console.log(`[generate-slides] Token usage: user=${userId || 'anon'}, route=generate-slides(section), prompt_tokens=${resultWithTokens.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${resultWithTokens.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${resultWithTokens.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${resultWithTokens.durationMs}`);
+
+      // トークンログ保存（スライドテキスト生成分 → Supabase generation_logs）
       if (userId) {
         logGenerationTokens({
           sessionId: sessionId || undefined,

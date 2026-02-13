@@ -303,7 +303,12 @@ export async function POST(
 
     const visualPromptEn = translationResult.text;
 
-    // 翻訳のトークンログ保存（非ブロッキング）
+    // トークン使用量ログ — 翻訳（Vercel Logs用 構造化出力）
+    if (translationResult.usageMetadata) {
+      console.log(`[generate-slide-image] Token usage: user=${userId || 'anon'}, route=generate-slide-image(translation), prompt_tokens=${translationResult.usageMetadata.promptTokenCount ?? 0}, output_tokens=${translationResult.usageMetadata.candidatesTokenCount ?? 0}, total_tokens=${translationResult.usageMetadata.totalTokenCount ?? 0}, duration_ms=${translationResult.durationMs ?? 0}`);
+    }
+
+    // 翻訳のトークンログ保存（非ブロッキング → Supabase generation_logs）
     if (userId && translationResult.usageMetadata) {
       logGenerationTokens({
         sessionId: sessionId || undefined,
@@ -335,7 +340,10 @@ export async function POST(
 
     console.log('[generate-slide-image] Result status:', result.status);
 
-    // 画像生成のトークンログ保存（Imagen APIにはトークン概念がないが、呼び出し記録として）
+    // トークン使用量ログ — 画像生成（Vercel Logs用 構造化出力）
+    console.log(`[generate-slide-image] Token usage: user=${userId || 'anon'}, route=generate-slide-image(imagen), prompt_tokens=0, output_tokens=0, total_tokens=0, duration_ms=${imageDurationMs}, status=${result.status}`);
+
+    // 画像生成のトークンログ保存（Imagen APIにはトークン概念がないが、呼び出し記録として → Supabase generation_logs）
     if (userId) {
       logGenerationTokens({
         sessionId: sessionId || undefined,

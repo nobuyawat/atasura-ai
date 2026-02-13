@@ -276,7 +276,10 @@ export async function POST(
     const result = resultWithTokens.data;
     console.log('[generate-slides-v2] Generated slides:', result.slides?.length || 0);
 
-    // トークンログ保存（非ブロッキング）
+    // トークン使用量ログ（Vercel Logs用 構造化出力）
+    console.log(`[generate-slides-v2] Token usage: user=${userId || 'anon'}, route=generate-slides-v2, prompt_tokens=${resultWithTokens.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${resultWithTokens.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${resultWithTokens.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${resultWithTokens.durationMs}`);
+
+    // トークンログ保存（非ブロッキング → Supabase generation_logs）
     if (userId) {
       logGenerationTokens({
         sessionId: sessionId || undefined,

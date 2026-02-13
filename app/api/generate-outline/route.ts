@@ -115,7 +115,10 @@ export async function POST(request: NextRequest) {
     const result = await generateJSONWithTokens<OutlineResponse>(prompt);
     console.log('[generate-outline] Gemini API returned successfully');
 
-    // トークンログ保存（非ブロッキング）
+    // トークン使用量ログ（Vercel Logs用 構造化出力）
+    console.log(`[generate-outline] Token usage: user=${userId || 'anon'}, route=generate-outline, prompt_tokens=${result.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${result.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${result.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${result.durationMs}`);
+
+    // トークンログ保存（非ブロッキング → Supabase generation_logs）
     if (userId) {
       logGenerationTokens({
         sessionId: sessionId || undefined,
