@@ -18,6 +18,7 @@ import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
 import { resolvePlanFromPrice, getPlanFromPriceId, PLAN_CREDITS } from '@/lib/plans';
+import { sendWelcomeEmail } from '@/lib/email/resend';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -97,6 +98,8 @@ export async function POST(request: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         await handleCheckoutCompleted(session, supabase);
+        // ウェルカムメール送信（決済処理には影響させない）
+        await sendWelcomeEmailSafe(event, session, supabase);
         break;
       }
 
@@ -509,5 +512,118 @@ async function handleScheduleCleared(
     console.log(`[Webhook] Schedule cleared for user: ${userId}`);
   } catch (err) {
     console.error('[Webhook] Error handling schedule event:', err);
+  }
+}
+
+/* ================================================================== */
+/*  Welcome Email — 安全ラッパー                                       */
+/*  送信失敗しても決済・DB処理を止めない。冪等性保証付き。              */
+/* ================================================================== */
+async function sendWelcomeEmailSafe(
+  event: Stripe.Event,
+  session: Stripe.Checkout.Session,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  try {
+    // ── 1) 冪等チェック: 同一 event.id で送信済みなら skip ──
+    const { data: existing } = await supabase
+      .from('email_logs')
+      .select('id')
+      .eq('stripe_event_id', event.id)
+      .maybeSingle();
+
+    if (existing) {
+      console.log(`[Webhook][Email] Already processed event ${event.id}, skipping`);
+      return;
+    }
+
+    // ── 2) 宛先メール解決 ──
+    let toEmail = session.customer_email;
+    if (!toEmail && session.customer) {
+      try {
+        const customer = await stripe.customers.retrieve(
+          session.customer as string
+        );
+        if (customer && !customer.deleted) {
+          toEmail = (customer as Stripe.Customer).email;
+        }
+      } catch (e) {
+        console.warn('[Webhook][Email] Failed to fetch customer email:', e);
+      }
+    }
+
+    if (!toEmail) {
+      console.warn('[Webhook][Email] No email found for session, skipping welcome email');
+      return;
+    }
+
+    // ── 3) プラン名解決（表示用） ──
+    const planLabelMap: Record<string, string> = {
+      starter: 'スタータープラン',
+      basic: 'ベーシックプラン',
+      creator: 'クリエイタープラン',
+    };
+    let planName = 'ご契約プラン';
+    if (session.subscription) {
+      try {
+        const sub = await stripe.subscriptions.retrieve(
+          session.subscription as string
+        );
+        const resolved = resolvePlanFromSubscription(sub);
+        planName = planLabelMap[resolved.plan] || planName;
+      } catch {
+        // プラン名が取れなくても送信は続行
+      }
+    }
+
+    // ── 4) Resend で送信 ──
+    console.log(`[Webhook][Email] Sending welcome email to ${toEmail}`);
+    const result = await sendWelcomeEmail({
+      to: toEmail,
+      name: session.customer_details?.name || undefined,
+      plan: planName,
+    });
+
+    // Resend v2 SDK: result.data / result.error
+    const emailId = (result as any)?.data?.id;
+    const emailError = (result as any)?.error;
+
+    if (emailError) {
+      console.error('[Webhook][Email] Resend error:', emailError);
+      // 送信失敗を記録（retry時に再送しない）
+      await supabase.from('email_logs').insert({
+        stripe_event_id: event.id,
+        user_id: session.client_reference_id || session.metadata?.userId || null,
+        email: toEmail,
+        type: 'welcome',
+        status: 'failed',
+        error_message: JSON.stringify(emailError),
+        payload: {
+          session_id: session.id,
+          plan: planName,
+          resend_error: emailError,
+        },
+      });
+      return;
+    }
+
+    // ── 5) 成功ログ保存 ──
+    await supabase.from('email_logs').insert({
+      stripe_event_id: event.id,
+      user_id: session.client_reference_id || session.metadata?.userId || null,
+      email: toEmail,
+      type: 'welcome',
+      status: 'sent',
+      payload: {
+        session_id: session.id,
+        plan: planName,
+        resend_email_id: emailId,
+      },
+    });
+
+    console.log(`[Webhook][Email] ✅ Welcome email sent to ${toEmail} (resend_id: ${emailId})`);
+  } catch (err) {
+    // メール送信の全エラーをキャッチ — 決済フローを止めない
+    console.error('[Webhook][Email] Unexpected error (non-fatal):', err);
   }
 }
