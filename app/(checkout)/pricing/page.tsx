@@ -100,7 +100,7 @@ const PLANS: PricingPlan[] = [
     recommendation: 'プレゼン・講座資料・副業に',
     pricingDisclaimer: PAID_DISCLAIMER,
     features: [
-      { text: '5分動画を大量作成', isAvailable: true, highlight: true },
+      { text: '5分動画相当台本を大量作成', isAvailable: true, highlight: true },
       { text: 'スライド生成（複数回）', isAvailable: true },
       { text: 'テンプレート無制限利用', isAvailable: true },
       { text: '修正・再生成OK', isAvailable: true },
