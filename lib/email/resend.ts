@@ -25,7 +25,11 @@ function getFromEmail(): string {
 }
 
 function getAppUrl(): string {
-  return process.env.PUBLIC_APP_URL || 'https://atasura-ai.vercel.app';
+  return (
+    process.env.PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    'https://atasura-ai.vercel.app'
+  );
 }
 
 /* ------------------------------------------------------------------ */

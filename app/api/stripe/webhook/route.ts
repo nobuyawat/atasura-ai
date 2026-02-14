@@ -597,9 +597,10 @@ async function sendWelcomeEmailSafe(
         email: toEmail,
         type: 'welcome',
         status: 'failed',
-        error_message: JSON.stringify(emailError),
+        error_message: typeof emailError === 'string' ? emailError : JSON.stringify(emailError),
         payload: {
-          session_id: session.id,
+          checkout_session_id: session.id,
+          customer_id: session.customer,
           plan: planName,
           resend_error: emailError,
         },
@@ -615,7 +616,8 @@ async function sendWelcomeEmailSafe(
       type: 'welcome',
       status: 'sent',
       payload: {
-        session_id: session.id,
+        checkout_session_id: session.id,
+        customer_id: session.customer,
         plan: planName,
         resend_email_id: emailId,
       },
