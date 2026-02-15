@@ -447,10 +447,10 @@ export default function FaqPage() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button className="w-full sm:w-64 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-lg shadow-indigo-500/20 transform hover:-translate-y-1">
+              <a href="mailto:kmnworks100@gmail.com?subject=アタスラAIに関するお問い合わせ" className="w-full sm:w-64 px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-lg shadow-indigo-500/20 transform hover:-translate-y-1 no-underline">
                 <MessageCircleIcon className="w-5 h-5" />
                 お問い合わせ
-              </button>
+              </a>
             </div>
           </div>
         </div>

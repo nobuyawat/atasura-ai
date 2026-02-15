@@ -195,9 +195,9 @@ export default function DemoPage() {
             <Link href="/login" className="w-full sm:w-auto px-12 py-5 bg-[#FF3B6B] hover:bg-[#e0345d] text-white rounded-full font-bold text-xl shadow-2xl shadow-[#FF3B6B]/40 transition-all transform hover:scale-105">
               今すぐ無料で試す
             </Link>
-            <button className="w-full sm:w-auto px-12 py-5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xl transition-all">
+            <a href="mailto:kmnworks100@gmail.com?subject=アタスラAIに関するお問い合わせ" className="w-full sm:w-auto px-12 py-5 bg-white/10 hover:bg-white/20 text-white rounded-full font-bold text-xl transition-all no-underline">
               お問い合わせ
-            </button>
+            </a>
           </div>
           <p className="mt-8 text-sm text-[#DADADA]">
             登録なしでもデモの続きをご覧いただけます。
