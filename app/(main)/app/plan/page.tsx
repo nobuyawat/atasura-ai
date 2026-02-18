@@ -363,6 +363,14 @@ export default function PlanManagementPage() {
               プラン変更
             </h3>
 
+            {/* 請求タイミング注記 */}
+            <div className="mb-5 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+              <p className="text-xs text-blue-300 leading-relaxed">
+                💡 アップグレードは即時反映され、日割り差額が請求されます。請求がクレジットカードに反映されるまで数分〜数時間かかる場合があります。
+                ダウングレードは次回更新日から適用されます。
+              </p>
+            </div>
+
             {/* アップグレード */}
             {upgradePlans.length > 0 && (
               <div className="mb-6">
@@ -482,15 +490,15 @@ export default function PlanManagementPage() {
           </section>
         )}
 
-        {/* ===== 請求書/領収書 ===== */}
+        {/* ===== 請求書・請求状況 ===== */}
         {subscription.hasStripeCustomer && (
           <section className="p-6 rounded-2xl bg-[#161B22] border border-white/10">
             <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
               <FileText className="w-5 h-5 text-indigo-400" />
-              請求書・領収書
+              請求書・請求状況
             </h3>
             <p className="text-sm text-gray-400 mb-4">
-              Stripeの管理画面で請求書や領収書をダウンロードできます。
+              請求書・領収書のダウンロードや、現在の請求状況を確認できます。プラン変更後の差額請求もこちらでご確認いただけます。
             </p>
             <button
               onClick={() => executeAction('portal')}
@@ -498,7 +506,7 @@ export default function PlanManagementPage() {
               className="flex items-center gap-2 px-4 py-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 font-bold hover:bg-indigo-500/20 transition-all active:scale-95 disabled:opacity-50"
             >
               {actionLoading === 'portal' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-              請求書・領収書を確認
+              請求状況を確認する
             </button>
           </section>
         )}

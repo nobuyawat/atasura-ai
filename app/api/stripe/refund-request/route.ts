@@ -2,11 +2,13 @@
  * 返金申請 API
  * POST /api/stripe/refund-request
  *
- * 返金申請をDBに保存する（実際のRefundは運営がStripe管理画面で手動実行）
+ * 返金申請をDBに保存し、運営通知メール＋ユーザー確認メールを送信する
+ * （実際のRefundは運営がStripe管理画面で手動実行）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { sendRefundAdminNotification, sendRefundUserConfirmation } from '@/lib/email/resend';
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,11 +47,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`[Refund] Request submitted by user: ${user.id}`);
+    console.log(`[Refund] Request submitted by user: ${user.id}, email: ${email}`);
+
+    // 4. メール送信（非同期・エラーでも申請自体は成功とする）
+    try {
+      // 4a. 運営通知メール
+      const adminResult = await sendRefundAdminNotification({
+        userEmail: email,
+        purchaseDate,
+        reason,
+        userId: user.id,
+      });
+      const adminError = (adminResult as any)?.error;
+      if (adminError) {
+        console.error('[Refund] Admin notification email error:', adminError);
+      } else {
+        console.log(`[Refund] Admin notification sent, id: ${(adminResult as any)?.data?.id}`);
+      }
+
+      // 4b. ユーザー確認メール
+      const userResult = await sendRefundUserConfirmation({ to: email });
+      const userError = (userResult as any)?.error;
+      if (userError) {
+        console.error('[Refund] User confirmation email error:', userError);
+      } else {
+        console.log(`[Refund] User confirmation sent to ${email}, id: ${(userResult as any)?.data?.id}`);
+      }
+    } catch (emailErr) {
+      // メール送信失敗でも返金申請自体は成功
+      console.error('[Refund] Email sending failed (non-fatal):', emailErr);
+    }
 
     return NextResponse.json({
       success: true,
-      message: '返金リクエストを受け付けました。確認後、メールでご連絡いたします。',
+      message: '返金リクエストを受け付けました。確認メールをお送りしましたので、ご確認ください。通常1〜3営業日以内にご連絡いたします。',
     });
   } catch (error) {
     console.error('[Refund] Error:', error);

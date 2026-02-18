@@ -4,6 +4,7 @@
  * 環境変数:
  *   RESEND_API_KEY       – Resend API キー
  *   RESEND_FROM_EMAIL    – 送信元 (例: "アタスラAI <noreply@yourdomain.com>")
+ *   ADMIN_EMAIL          – 運営通知先 (例: "kmnworks100@gmail.com")
  *   PUBLIC_APP_URL       – アプリURL (例: "https://atasura-ai.vercel.app")
  */
 
@@ -22,6 +23,10 @@ function getResend(): Resend {
 
 function getFromEmail(): string {
   return process.env.RESEND_FROM_EMAIL || 'アタスラAI <onboarding@resend.dev>';
+}
+
+function getAdminEmail(): string {
+  return process.env.ADMIN_EMAIL || 'kmnworks100@gmail.com';
 }
 
 function getAppUrl(): string {
@@ -173,6 +178,179 @@ ${planLabel} へのご契約、誠にありがとうございます！
 `.trim();
 
   // ── 送信 ──────────────────────────────────────────
+  const result = await getResend().emails.send({
+    from: getFromEmail(),
+    to,
+    subject,
+    html,
+    text,
+  });
+
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Refund Request — Admin Notification                                */
+/* ------------------------------------------------------------------ */
+
+interface RefundNotificationParams {
+  userEmail: string;
+  purchaseDate: string;
+  reason: string;
+  userId: string;
+}
+
+/**
+ * 返金申請の運営通知メール
+ * 管理者（ADMIN_EMAIL）宛に返金申請の内容を送信する
+ */
+export async function sendRefundAdminNotification({
+  userEmail,
+  purchaseDate,
+  reason,
+  userId,
+}: RefundNotificationParams) {
+  const adminEmail = getAdminEmail();
+  const now = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+
+  const subject = `【アタスラAI】返金申請がありました - ${userEmail}`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f7f7f8;font-family:'Helvetica Neue',Arial,'Hiragino Sans',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f8;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr>
+          <td style="background:#ef4444;padding:20px 32px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:18px;font-weight:700;">返金申請通知</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            <table width="100%" cellpadding="8" cellspacing="0" style="font-size:14px;color:#333;">
+              <tr>
+                <td style="font-weight:700;color:#666;width:120px;">申請日時</td>
+                <td>${now}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:700;color:#666;">ユーザーEmail</td>
+                <td>${userEmail}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:700;color:#666;">ユーザーID</td>
+                <td style="font-size:12px;color:#888;">${userId}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:700;color:#666;">購入日</td>
+                <td>${purchaseDate}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:700;color:#666;vertical-align:top;">返金理由</td>
+                <td style="white-space:pre-wrap;">${reason}</td>
+              </tr>
+            </table>
+            <hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />
+            <p style="margin:0;font-size:13px;color:#999;">
+              Stripe Dashboard で該当ユーザーを確認し、返金処理を行ってください。<br>
+              Supabase の refund_requests テーブルにもレコードが保存されています。
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim();
+
+  const text = `
+【アタスラAI】返金申請通知
+
+申請日時: ${now}
+ユーザーEmail: ${userEmail}
+ユーザーID: ${userId}
+購入日: ${purchaseDate}
+返金理由: ${reason}
+
+Stripe Dashboard で該当ユーザーを確認し、返金処理を行ってください。
+`.trim();
+
+  const result = await getResend().emails.send({
+    from: getFromEmail(),
+    to: adminEmail,
+    subject,
+    html,
+    text,
+  });
+
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Refund Request — User Confirmation                                 */
+/* ------------------------------------------------------------------ */
+
+interface RefundUserConfirmationParams {
+  to: string;
+}
+
+/**
+ * 返金申請受付確認メール（ユーザー宛）
+ */
+export async function sendRefundUserConfirmation({ to }: RefundUserConfirmationParams) {
+  const subject = '【アタスラAI】返金申請を受け付けました';
+
+  const html = `
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f7f7f8;font-family:'Helvetica Neue',Arial,'Hiragino Sans',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7f7f8;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:24px 32px;text-align:center;">
+            <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">アタスラAI</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;">
+            <p style="margin:0 0 18px;font-size:16px;color:#1a1a2e;line-height:1.7;">
+              返金申請を受け付けました。
+            </p>
+            <p style="margin:0 0 18px;font-size:15px;color:#444;line-height:1.7;">
+              内容を確認のうえ、通常1〜3営業日以内にメールでご連絡いたします。<br>
+              返金が承認された場合、ご利用のクレジットカードに返金されます。
+            </p>
+            <hr style="border:none;border-top:1px solid #eee;margin:24px 0;" />
+            <p style="margin:0;font-size:13px;color:#999;line-height:1.6;">
+              ご不明な点がございましたら、このメールにそのままご返信ください。
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#fafafa;padding:18px 32px;text-align:center;border-top:1px solid #eee;">
+            <p style="margin:0;font-size:11px;color:#bbb;">&copy; アタスラAI</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim();
+
+  const text = `
+【アタスラAI】返金申請を受け付けました
+
+返金申請を受け付けました。
+内容を確認のうえ、通常1〜3営業日以内にメールでご連絡いたします。
+返金が承認された場合、ご利用のクレジットカードに返金されます。
+
+ご不明な点がございましたら、このメールにそのままご返信ください。
+`.trim();
+
   const result = await getResend().emails.send({
     from: getFromEmail(),
     to,
