@@ -3,13 +3,14 @@
  * POST /api/generate-outline
  *
  * Gemini 2.0 Flash を使用して、講座の骨子を生成
- * クレジットシステム: トークンログ保存対応
+ * クレジットシステム: 成功時のみ消費（冪等キー付き）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSONWithTokens } from '@/lib/gemini';
 import { createClient } from '@/lib/supabase/server';
-import { logGenerationTokens, checkFreePlanLimit, incrementFreeScriptUses, checkCredits, consumeCredits, type GenerationActionType } from '@/lib/credits';
+import { logGenerationTokens, incrementFreeScriptUses, preGenerationCheck, consumeCreditsIdempotent, getCreditsRemaining, type GenerationActionType } from '@/lib/credits';
+import { randomUUID } from 'crypto';
 
 // 入力の型定義
 interface OutlineRequest {
@@ -24,6 +25,7 @@ interface OutlineRequest {
   voiceMemoText?: string;
   existingBullets?: string[];
   sessionId?: string; // クレジットシステム用セッションID
+  requestId?: string; // 冪等キー（フロントから渡す）
 }
 
 // 出力の型定義
@@ -36,6 +38,10 @@ interface OutlineResponse {
 export async function POST(request: NextRequest) {
   console.log('[generate-outline] === API Route called ===');
 
+  // リクエストIDを早期に確定（冪等キー）
+  let body: OutlineRequest;
+  let requestId: string;
+
   try {
     // ユーザー認証
     const supabase = createClient();
@@ -43,66 +49,31 @@ export async function POST(request: NextRequest) {
     const userId = user?.id;
 
     console.log('[generate-outline] Parsing request body...');
-    const body: OutlineRequest = await request.json();
-    const sessionId = body.sessionId; // フロントから渡されるセッションID（任意）
-    console.log('[generate-outline] Request body parsed, purposeText length:', body.purposeText?.length || 0);
+    body = await request.json();
+    requestId = body.requestId || randomUUID();
+    const sessionId = body.sessionId;
+    console.log('[generate-outline] Request body parsed, purposeText length:', body.purposeText?.length || 0, 'requestId:', requestId);
 
     // バリデーション
     if (!body.purposeText?.trim()) {
       console.log('[generate-outline] Validation failed: purposeText is empty');
       return NextResponse.json(
-        { error: '目的・伝えたいことを入力してください' },
+        { error: '目的・伝えたいことを入力してください', creditsConsumed: false },
         { status: 400 }
       );
     }
 
-    // 無料プラン上限チェック
-    let userPlan = 'free'; // デフォルト
+    // 生成前チェック（クレジット消費はしない、残高と上限の確認のみ）
+    let userPlan = 'free';
     if (userId) {
-      const freePlanCheck = await checkFreePlanLimit(userId);
-      userPlan = freePlanCheck.plan;
-      if (!freePlanCheck.allowed) {
-        console.log(`[generate-outline] Free plan limit reached: user=${userId}, uses=${freePlanCheck.uses}`);
+      const check = await preGenerationCheck(userId, 1);
+      userPlan = check.plan;
+      if (!check.allowed && check.errorResponse) {
+        console.log(`[generate-outline] Pre-check failed: user=${userId}, code=${check.errorResponse.code}`);
         return NextResponse.json(
-          {
-            error: '無料プランの上限（2分台本×3本）に達しました。スターター以上のプランにアップグレードしてください。',
-            code: 'FREE_PLAN_LIMIT_REACHED',
-            freePlan: { uses: freePlanCheck.uses, limit: freePlanCheck.limit, locked: true },
-          },
-          { status: 402 }
+          { ...check.errorResponse, creditsConsumed: false },
+          { status: check.errorResponse.status }
         );
-      }
-
-      // 有料プランのクレジット残高チェック + 消費（生成前に1クレジット消費）
-      if (freePlanCheck.plan !== 'free') {
-        const creditCheck = await checkCredits(userId, 1);
-        if (!creditCheck.hasCredits) {
-          console.log(`[generate-outline] Insufficient credits: user=${userId}, remaining=${creditCheck.creditsRemaining}`);
-          return NextResponse.json(
-            {
-              error: '今月のクレジットを使い切りました。翌月のリセットをお待ちいただくか、上位プランへアップグレードしてください。',
-              code: 'INSUFFICIENT_CREDITS',
-              credits: { remaining: creditCheck.creditsRemaining, required: 1 },
-            },
-            { status: 402 }
-          );
-        }
-
-        // クレジットを1消費（アトミック減算）
-        const consumeResult = await consumeCredits(userId, 1, sessionId);
-        if (!consumeResult.success) {
-          console.error(`[generate-outline] Credit consumption failed: user=${userId}, error=${consumeResult.error}`);
-          return NextResponse.json(
-            {
-              error: consumeResult.error === 'insufficient_credits'
-                ? '今月のクレジットを使い切りました。翌月のリセットをお待ちいただくか、上位プランへアップグレードしてください。'
-                : 'クレジット消費に失敗しました。再試行してください。',
-              code: consumeResult.error === 'insufficient_credits' ? 'INSUFFICIENT_CREDITS' : 'CREDIT_CONSUME_ERROR',
-            },
-            { status: consumeResult.error === 'insufficient_credits' ? 402 : 500 }
-          );
-        }
-        console.log(`[generate-outline] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 
@@ -111,15 +82,44 @@ export async function POST(request: NextRequest) {
     const prompt = buildOutlinePrompt(body);
     console.log('[generate-outline] Prompt built, length:', prompt.length);
 
+    // Gemini API呼び出し（クレジット未消費の状態で実行）
     console.log('[generate-outline] Calling Gemini API...');
     const result = await generateJSONWithTokens<OutlineResponse>(prompt);
     console.log('[generate-outline] Gemini API returned successfully');
 
-    // トークン使用量ログ（Vercel Logs用 構造化出力）
-    console.log(`[generate-outline] Token usage: user=${userId || 'anon'}, route=generate-outline, prompt_tokens=${result.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${result.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${result.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${result.durationMs}`);
+    // 結果の検証
+    if (!result.data.outlineBullets || !Array.isArray(result.data.outlineBullets)) {
+      throw new Error('Invalid response: outlineBullets is missing or not an array');
+    }
 
-    // トークンログ保存（非ブロッキング → Supabase generation_logs）
+    // === 生成成功 → ここでクレジット消費 ===
+    let creditsConsumed = false;
+    let creditsRemaining: number | undefined;
+
     if (userId) {
+      if (userPlan === 'free') {
+        // 無料プラン: 回数インクリメント
+        incrementFreeScriptUses(userId).catch(err =>
+          console.error('[generate-outline] Free script uses increment failed:', err)
+        );
+      } else {
+        // 有料プラン: 冪等クレジット消費
+        const consumeResult = await consumeCreditsIdempotent(
+          userId, requestId, 1, 'generate_outline',
+          {
+            courseTitle: body.courseTitle,
+            chapterTitle: body.chapterTitle,
+            sectionTitle: body.sectionTitle,
+            durationMinutes: body.durationMinutes,
+          },
+          sessionId
+        );
+        creditsConsumed = consumeResult.creditsConsumed;
+        creditsRemaining = consumeResult.creditsRemaining;
+        console.log(`[generate-outline] Credit consumed after success: user=${userId}, consumed=${creditsConsumed}, remaining=${creditsRemaining}`);
+      }
+
+      // トークンログ保存（非ブロッキング → Supabase generation_logs）
       logGenerationTokens({
         sessionId: sessionId || undefined,
         userId,
@@ -135,35 +135,28 @@ export async function POST(request: NextRequest) {
       }).catch(err => console.error('[generate-outline] Token log failed:', err));
     }
 
-    // 結果の検証
-    if (!result.data.outlineBullets || !Array.isArray(result.data.outlineBullets)) {
-      throw new Error('Invalid response: outlineBullets is missing or not an array');
-    }
+    // トークン使用量ログ（Vercel Logs用 構造化出力）
+    console.log(`[generate-outline] Token usage: user=${userId || 'anon'}, route=generate-outline, prompt_tokens=${result.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${result.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${result.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${result.durationMs}`);
 
     console.log('[generate-outline] Generated outline:', result.data.outlineBullets.length, 'items');
 
-    // 無料プランの場合のみ、生成成功時に回数をインクリメント
-    // （有料プランは生成前にクレジット消費済み）
-    if (userId && userPlan === 'free') {
-      incrementFreeScriptUses(userId).catch(err =>
-        console.error('[generate-outline] Free script uses increment failed:', err)
-      );
-    }
-
-    return NextResponse.json(result.data);
+    return NextResponse.json({
+      ...result.data,
+      creditsConsumed,
+      remainingCredits: creditsRemaining,
+    });
   } catch (error: any) {
     console.error('[generate-outline] === ERROR ===');
     console.error('[generate-outline] Error message:', error?.message);
     console.error('[generate-outline] Error status:', error?.status);
     console.error('[generate-outline] Error code:', error?.code);
-    console.error('[generate-outline] Error stack:', error?.stack);
 
-    // エラーメッセージの分類
+    // エラーメッセージの分類（クレジットは消費されていない旨を必ず伝える）
     const status = error?.status || error?.code;
     if ([429, 503, 529].includes(status)) {
       console.log('[generate-outline] Returning 503 (server busy)');
       return NextResponse.json(
-        { error: 'AIサーバーが混雑しています。少し待ってから再試行してください。' },
+        { error: 'AIサーバーが混雑しています。少し待ってから再試行してください。クレジットは消費されていません。', creditsConsumed: false },
         { status: 503 }
       );
     }
@@ -171,14 +164,14 @@ export async function POST(request: NextRequest) {
     if (error.message?.includes('GEMINI_API_KEY')) {
       console.log('[generate-outline] Returning 500 (API key missing)');
       return NextResponse.json(
-        { error: 'APIキーが設定されていません。管理者にお問い合わせください。' },
+        { error: 'APIキーが設定されていません。管理者にお問い合わせください。', creditsConsumed: false },
         { status: 500 }
       );
     }
 
     console.log('[generate-outline] Returning 500 (generic error)');
     return NextResponse.json(
-      { error: '生成に失敗しました。入力内容を短くして再試行してください。' },
+      { error: '生成に失敗しました。クレジットは消費されていません。入力内容を短くして再試行してください。', creditsConsumed: false },
       { status: 500 }
     );
   }

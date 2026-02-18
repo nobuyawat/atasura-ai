@@ -68,6 +68,7 @@ export async function generateOutline(input: ScriptDraftInput): Promise<OutlineO
     constraintsText: input.constraints,
     voiceMemoText: input.voiceMemo,
     existingBullets: input.existingBullets,
+    requestId: crypto.randomUUID(),
   };
 
   const response = await fetch('/api/generate-outline', {
@@ -118,6 +119,7 @@ export async function generateScriptDraft(
     voiceMemoText: input.voiceMemo,
     outlineDraft: outline,
     existingBullets: input.existingBullets,
+    requestId: crypto.randomUUID(),
   };
 
   const response = await fetch('/api/generate-script', {
@@ -216,14 +218,15 @@ export async function generateChapterSlides(input: ChapterSlideInput): Promise<S
   console.log('[SLIDE_GENERATOR] Generating chapter slides for:', input.chapterTitle);
   console.log('[SLIDE_GENERATOR] Generate images:', input.generateImages);
 
-  const payload: SlideGenerationRequest = {
-    scope: 'chapter',
+  const payload = {
+    scope: 'chapter' as const,
     courseTitle: input.courseTitle,
     chapterId: input.chapterId,
     chapterTitle: input.chapterTitle,
     sections: input.sections,
     totalDuration: input.totalDuration,
     generateImages: input.generateImages,
+    requestId: crypto.randomUUID(),
   };
 
   const response = await fetch('/api/generate-slides', {
@@ -280,13 +283,14 @@ export async function generateSectionSlides(input: SectionSlideInput): Promise<S
   console.log('[SLIDE_GENERATOR] Generating section slides for:', input.section.sectionTitle);
   console.log('[SLIDE_GENERATOR] Generate images:', input.generateImages);
 
-  const payload: SlideGenerationRequest = {
-    scope: 'section',
+  const payload = {
+    scope: 'section' as const,
     courseTitle: input.courseTitle,
     chapterTitle: input.chapterTitle,
     section: input.section,
     totalDuration: input.totalDuration,
     generateImages: input.generateImages,
+    requestId: crypto.randomUUID(),
   };
 
   const response = await fetch('/api/generate-slides', {

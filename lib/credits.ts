@@ -6,6 +6,11 @@
  * - 裏側（運営）: Gemini APIのtotal_tokensを毎回ログ保存
  *
  * 1クレジット ≒ 333トークン（Gemini Pro安全運用上限から逆算）
+ *
+ * クレジット消費ポリシー（2024年改訂）:
+ * - 生成が **成功した時のみ** クレジットを消費する
+ * - 失敗 / タイムアウト / 混雑中 では消費しない
+ * - request_id（冪等キー）で二重消費を防止する
  */
 
 import { createClient } from '@/lib/supabase/server';
@@ -391,6 +396,40 @@ export async function logGenerationTokens(entry: GenerationLogEntry): Promise<vo
 }
 
 // =====================================================
+// Usage Event Logging（管理者レポート用）
+// =====================================================
+
+export interface UsageLogEntry {
+  userId: string;
+  action: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * 利用イベントを usage_logs テーブルに記録（軽量・管理者レポート用）
+ * generation_logs（トークン詳細）とは別に、シンプルな利用ログを保存する。
+ */
+export async function logUsageEvent(entry: UsageLogEntry): Promise<void> {
+  try {
+    const supabase = await createClient();
+
+    const { error } = await supabase
+      .from('usage_logs')
+      .insert({
+        user_id: entry.userId,
+        action: entry.action,
+        metadata: entry.metadata || null,
+      });
+
+    if (error) {
+      console.error('[Usage] Failed to log usage event:', error.message);
+    }
+  } catch (err: any) {
+    console.error('[Usage] Usage logging error (non-blocking):', err?.message);
+  }
+}
+
+// =====================================================
 // Stripe Webhook用: プランクレジットリセット
 // =====================================================
 
@@ -418,5 +457,159 @@ export async function resetCreditsForPlan(
     console.error('[Credits] Failed to reset credits:', error.message);
   } else {
     console.log(`[Credits] Reset credits for user ${userId}: plan=${plan}, credits=${creditLimit}`);
+  }
+}
+
+// =====================================================
+// 生成前チェック（クレジット消費はしない）
+// =====================================================
+
+export interface PreGenerationCheckResult {
+  allowed: boolean;
+  plan: string;
+  errorResponse?: {
+    error: string;
+    code: string;
+    status: number;
+    freePlan?: { uses: number; limit: number; locked: boolean };
+    credits?: { remaining: number; required: number };
+  };
+}
+
+/**
+ * 生成APIの事前チェック（クレジット消費なし）
+ * - 無料プラン上限チェック
+ * - 有料プランのクレジット残高チェック
+ * クレジット消費は生成成功後に consumeCreditsIdempotent() で行う
+ */
+export async function preGenerationCheck(
+  userId: string,
+  requiredCredits: number = 1
+): Promise<PreGenerationCheckResult> {
+  const freePlanCheck = await checkFreePlanLimit(userId);
+
+  if (!freePlanCheck.allowed) {
+    return {
+      allowed: false,
+      plan: freePlanCheck.plan,
+      errorResponse: {
+        error: '無料プランの上限（2分台本×3本）に達しました。スターター以上のプランにアップグレードしてください。',
+        code: 'FREE_PLAN_LIMIT_REACHED',
+        status: 402,
+        freePlan: { uses: freePlanCheck.uses, limit: freePlanCheck.limit, locked: true },
+      },
+    };
+  }
+
+  if (freePlanCheck.plan !== 'free') {
+    const creditCheck = await checkCredits(userId, requiredCredits);
+    if (!creditCheck.hasCredits) {
+      return {
+        allowed: false,
+        plan: freePlanCheck.plan,
+        errorResponse: {
+          error: '今月のクレジットを使い切りました。翌月のリセットをお待ちいただくか、上位プランへアップグレードしてください。',
+          code: 'INSUFFICIENT_CREDITS',
+          status: 402,
+          credits: { remaining: creditCheck.creditsRemaining, required: requiredCredits },
+        },
+      };
+    }
+  }
+
+  return { allowed: true, plan: freePlanCheck.plan };
+}
+
+// =====================================================
+// 冪等クレジット消費（成功時のみ・二重防止）
+// =====================================================
+
+export interface IdempotentConsumeResult {
+  success: boolean;
+  creditsConsumed: boolean;
+  creditsRemaining?: number;
+  error?: string;
+}
+
+/**
+ * 冪等なクレジット消費（生成成功後に呼ぶ）
+ *
+ * - request_id で二重消費を防止
+ * - usage_logs に request_id + status を記録
+ * - 同じ request_id で再度呼ばれた場合は消費しない
+ */
+export async function consumeCreditsIdempotent(
+  userId: string,
+  requestId: string,
+  amount: number = 1,
+  action: string,
+  metadata?: Record<string, unknown>,
+  sessionId?: string
+): Promise<IdempotentConsumeResult> {
+  const supabase = await createClient();
+
+  try {
+    // 1. 冪等チェック: 同じ request_id で既に消費済みか確認
+    const { data: existing } = await supabase
+      .from('usage_logs')
+      .select('id, status')
+      .eq('request_id', requestId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existing && existing.status === 'SUCCESS') {
+      console.log(`[Credits] Idempotent skip: request_id=${requestId} already consumed`);
+      const remaining = await getCreditsRemaining(userId);
+      return { success: true, creditsConsumed: false, creditsRemaining: remaining };
+    }
+
+    // 2. クレジット消費（アトミック）
+    const consumeResult = await consumeCredits(userId, amount, sessionId);
+    if (!consumeResult.success) {
+      // 消費失敗 → usage_logs に FAILED で記録
+      await supabase.from('usage_logs').insert({
+        user_id: userId,
+        action,
+        request_id: requestId,
+        status: 'FAILED',
+        error_message: consumeResult.error || 'credit_consume_failed',
+        metadata: metadata || null,
+      }).then(({ error: logErr }) => {
+        if (logErr) console.error('[Credits] Failed to log FAILED usage:', logErr.message);
+      });
+
+      return {
+        success: false,
+        creditsConsumed: false,
+        creditsRemaining: consumeResult.creditsRemaining,
+        error: consumeResult.error,
+      };
+    }
+
+    // 3. 成功 → usage_logs に SUCCESS で記録（request_id 付き）
+    await supabase.from('usage_logs').insert({
+      user_id: userId,
+      action,
+      request_id: requestId,
+      status: 'SUCCESS',
+      metadata: metadata || null,
+    }).then(({ error: logErr }) => {
+      if (logErr) console.error('[Credits] Failed to log SUCCESS usage:', logErr.message);
+    });
+
+    console.log(`[Credits] Consumed ${amount} credit(s) idempotently: request_id=${requestId}, remaining=${consumeResult.creditsRemaining}`);
+
+    return {
+      success: true,
+      creditsConsumed: true,
+      creditsRemaining: consumeResult.creditsRemaining,
+    };
+  } catch (err: any) {
+    console.error('[Credits] consumeCreditsIdempotent error:', err?.message);
+    return {
+      success: false,
+      creditsConsumed: false,
+      error: err?.message || 'unknown_error',
+    };
   }
 }

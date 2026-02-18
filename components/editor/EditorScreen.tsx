@@ -980,6 +980,7 @@ export default function EditorScreen({ course, onCourseUpdate }: EditorScreenPro
         slideId: string;
         sectionId: string;
         visualPrompt: string;
+        requestId: string;
         contextMode?: 'decorative' | 'contextual';
         slideTitle?: string;
         slideBullets?: string[];
@@ -987,6 +988,7 @@ export default function EditorScreen({ course, onCourseUpdate }: EditorScreenPro
         slideId: slide.slideId,
         sectionId: activeSectionId,
         visualPrompt,
+        requestId: crypto.randomUUID(),
       };
 
       // contextualモードの場合、スライド本文も送信

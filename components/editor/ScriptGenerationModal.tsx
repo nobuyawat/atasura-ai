@@ -329,15 +329,19 @@ export default function ScriptGenerationModal({
 
       onComplete({ blocks, slideData });
       setToast({ message: '台本を生成しました', type: 'success' });
+      // 生成成功後にクレジット情報をリフレッシュ
+      refetchBalance();
     } catch (err: any) {
       console.error('[SCRIPT] Generation error:', err);
       const errorMessage = err?.message || '台本の生成に失敗しました。もう一度お試しください。';
       setError(errorMessage);
       setToast({ message: errorMessage, type: 'error' });
+      // エラー時にもクレジット情報をリフレッシュ
+      refetchBalance();
     } finally {
       setIsGeneratingScript(false);
     }
-  }, [outlineBullets, createPayload, onComplete]);
+  }, [outlineBullets, createPayload, onComplete, refetchBalance]);
 
   // 前のステップに戻る
   const handleBack = useCallback(() => {

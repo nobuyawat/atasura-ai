@@ -11,7 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSONWithTokens } from '@/lib/gemini';
 import { createClient } from '@/lib/supabase/server';
-import { logGenerationTokens, checkCredits, checkFreePlanLimit, consumeCredits, type GenerationActionType } from '@/lib/credits';
+import { logGenerationTokens, preGenerationCheck, consumeCreditsIdempotent, type GenerationActionType } from '@/lib/credits';
+import { randomUUID } from 'crypto';
 import {
   LightSlideGenerationRequest,
   LightSlideGenerationResponse,
@@ -223,47 +224,30 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
 
-    const body: LightSlideGenerationRequest & { sessionId?: string } = await request.json();
+    const body: LightSlideGenerationRequest & { sessionId?: string; requestId?: string } = await request.json();
     const sessionId = body.sessionId;
+    const requestId = body.requestId || randomUUID();
     console.log('[generate-slides-v2] Course:', body.courseTitle);
     console.log('[generate-slides-v2] Chapter:', body.chapterTitle);
     console.log('[generate-slides-v2] Sections:', body.sections.length);
 
     if (!body.sections || body.sections.length === 0) {
       return NextResponse.json(
-        { success: false, slides: [], error: 'セクションがありません' },
+        { success: false, slides: [], error: 'セクションがありません', creditsConsumed: false },
         { status: 400 }
       );
     }
 
-    // クレジット残高チェック + 1クレジット消費
+    // 生成前チェック（クレジット消費はしない）
+    let userPlan = 'free';
     if (userId) {
-      const freePlanCheck = await checkFreePlanLimit(userId);
-      if (!freePlanCheck.allowed) {
+      const check = await preGenerationCheck(userId, 1);
+      userPlan = check.plan;
+      if (!check.allowed && check.errorResponse) {
         return NextResponse.json(
-          { success: false, slides: [], error: '無料プランの上限に達しました。プランをアップグレードしてください。' },
-          { status: 402 }
+          { success: false, slides: [], ...check.errorResponse, creditsConsumed: false },
+          { status: check.errorResponse.status }
         );
-      }
-      if (freePlanCheck.plan !== 'free') {
-        const creditCheck = await checkCredits(userId, 1);
-        if (!creditCheck.hasCredits) {
-          console.log(`[generate-slides-v2] Insufficient credits: user=${userId}, remaining=${creditCheck.creditsRemaining}`);
-          return NextResponse.json(
-            { success: false, slides: [], error: '今月のクレジットを使い切りました。翌月のリセットをお待ちください。' },
-            { status: 402 }
-          );
-        }
-
-        const consumeResult = await consumeCredits(userId, 1, sessionId);
-        if (!consumeResult.success) {
-          console.error(`[generate-slides-v2] Credit consumption failed: user=${userId}, error=${consumeResult.error}`);
-          return NextResponse.json(
-            { success: false, slides: [], error: 'クレジット消費に失敗しました。再試行してください。' },
-            { status: 500 }
-          );
-        }
-        console.log(`[generate-slides-v2] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 
@@ -279,7 +263,26 @@ export async function POST(
     // トークン使用量ログ（Vercel Logs用 構造化出力）
     console.log(`[generate-slides-v2] Token usage: user=${userId || 'anon'}, route=generate-slides-v2, prompt_tokens=${resultWithTokens.usageMetadata?.promptTokenCount ?? 0}, output_tokens=${resultWithTokens.usageMetadata?.candidatesTokenCount ?? 0}, total_tokens=${resultWithTokens.usageMetadata?.totalTokenCount ?? 0}, duration_ms=${resultWithTokens.durationMs}`);
 
-    // トークンログ保存（非ブロッキング → Supabase generation_logs）
+    // === 生成成功 → ここでクレジット消費 ===
+    let creditsConsumed = false;
+    let creditsRemaining: number | undefined;
+
+    if (userId && userPlan !== 'free') {
+      const consumeResult = await consumeCreditsIdempotent(
+        userId, requestId, 1, 'generate_slides',
+        {
+          courseTitle: body.courseTitle,
+          chapterTitle: body.chapterTitle,
+          sectionsCount: body.sections.length,
+        },
+        sessionId
+      );
+      creditsConsumed = consumeResult.creditsConsumed;
+      creditsRemaining = consumeResult.creditsRemaining;
+      console.log(`[generate-slides-v2] Credit consumed after success: user=${userId}, consumed=${creditsConsumed}, remaining=${creditsRemaining}`);
+    }
+
+    // トークンログ保存（非ブロッキング）
     if (userId) {
       logGenerationTokens({
         sessionId: sessionId || undefined,
@@ -335,6 +338,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       slides,
+      creditsConsumed,
+      remainingCredits: creditsRemaining,
     });
 
   } catch (error: any) {
@@ -347,7 +352,8 @@ export async function POST(
         {
           success: false,
           slides: [],
-          error: 'AIサーバーが混雑しています。少し待ってから再試行してください。'
+          error: 'AIサーバーが混雑しています。少し待ってから再試行してください。クレジットは消費されていません。',
+          creditsConsumed: false,
         },
         { status: 503 }
       );
@@ -357,7 +363,8 @@ export async function POST(
       {
         success: false,
         slides: [],
-        error: 'スライド生成に失敗しました。再試行してください。'
+        error: 'スライド生成に失敗しました。クレジットは消費されていません。再試行してください。',
+        creditsConsumed: false,
       },
       { status: 500 }
     );

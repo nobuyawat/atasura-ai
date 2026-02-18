@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateJSONWithTokens, generateSlideImage } from '@/lib/gemini';
 import { createClient } from '@/lib/supabase/server';
-import { logGenerationTokens, checkCredits, checkFreePlanLimit, consumeCredits, type GenerationActionType } from '@/lib/credits';
+import { logGenerationTokens, preGenerationCheck, consumeCreditsIdempotent, type GenerationActionType } from '@/lib/credits';
+import { randomUUID } from 'crypto';
 import {
   SlideGenerationRequest,
   ChapterSlideGenerationRequest,
@@ -263,38 +264,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
 
-    const body: SlideGenerationRequest & { sessionId?: string } = await request.json();
+    const body: SlideGenerationRequest & { sessionId?: string; requestId?: string } = await request.json();
     const sessionId = body.sessionId;
-    console.log('[generate-slides] Scope:', body.scope);
+    const requestId = body.requestId || randomUUID();
+    console.log('[generate-slides] Scope:', body.scope, 'requestId:', requestId);
 
-    // クレジット残高チェック + 1クレジット消費
+    // 生成前チェック（クレジット消費はしない）
+    let userPlan = 'free';
     if (userId) {
-      const freePlanCheck = await checkFreePlanLimit(userId);
-      if (!freePlanCheck.allowed) {
+      const check = await preGenerationCheck(userId, 1);
+      userPlan = check.plan;
+      if (!check.allowed && check.errorResponse) {
         return NextResponse.json(
-          { success: false, slides: [], error: '無料プランの上限に達しました。プランをアップグレードしてください。' },
-          { status: 402 }
+          { success: false, slides: [], ...check.errorResponse, creditsConsumed: false },
+          { status: check.errorResponse.status }
         );
-      }
-      if (freePlanCheck.plan !== 'free') {
-        const creditCheck = await checkCredits(userId, 1);
-        if (!creditCheck.hasCredits) {
-          console.log(`[generate-slides] Insufficient credits: user=${userId}, remaining=${creditCheck.creditsRemaining}`);
-          return NextResponse.json(
-            { success: false, slides: [], error: '今月のクレジットを使い切りました。翌月のリセットをお待ちください。' },
-            { status: 402 }
-          );
-        }
-
-        const consumeResult = await consumeCredits(userId, 1, sessionId);
-        if (!consumeResult.success) {
-          console.error(`[generate-slides] Credit consumption failed: user=${userId}, error=${consumeResult.error}`);
-          return NextResponse.json(
-            { success: false, slides: [], error: 'クレジット消費に失敗しました。再試行してください。' },
-            { status: 500 }
-          );
-        }
-        console.log(`[generate-slides] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 
@@ -338,6 +322,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
           durationMs: resultWithTokens.durationMs,
           success: true,
         }).catch(err => console.error('[generate-slides] Token log failed:', err));
+
+        // Usage event logging は consumeCreditsIdempotent 内で実行
       }
 
       generatedSlides = (result.slides || []).map((slide, index) => {
@@ -422,6 +408,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
           durationMs: resultWithTokens.durationMs,
           success: true,
         }).catch(err => console.error('[generate-slides] Token log failed:', err));
+
+        // Usage event logging は consumeCreditsIdempotent 内で実行
       }
 
       generatedSlides = (result.slides || []).map((slide, index) =>
@@ -470,6 +458,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
       }
     }
 
+    // === 生成成功 → ここでクレジット消費 ===
+    let creditsConsumed = false;
+    let creditsRemaining: number | undefined;
+
+    if (userId && userPlan !== 'free') {
+      const consumeResult = await consumeCreditsIdempotent(
+        userId, requestId, 1, 'generate_slides',
+        {
+          courseTitle: body.scope === 'chapter' ? (body as any).courseTitle : (body as any).courseTitle,
+          chapterTitle: body.scope === 'chapter' ? (body as any).chapterTitle : (body as any).chapterTitle,
+          scope: body.scope,
+        },
+        sessionId
+      );
+      creditsConsumed = consumeResult.creditsConsumed;
+      creditsRemaining = consumeResult.creditsRemaining;
+      console.log(`[generate-slides] Credit consumed after success: user=${userId}, consumed=${creditsConsumed}, remaining=${creditsRemaining}`);
+    }
+
     console.log('[generate-slides] === FINAL RESPONSE ===');
     console.log('[generate-slides] Total slides:', generatedSlides.length);
     generatedSlides.forEach((slide, i) => {
@@ -479,6 +486,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
     return NextResponse.json({
       success: true,
       slides: generatedSlides,
+      creditsConsumed,
+      remainingCredits: creditsRemaining,
     });
 
   } catch (error: any) {
@@ -489,20 +498,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<SlideGene
     const status = error?.status || error?.code;
     if ([429, 503, 529].includes(status)) {
       return NextResponse.json(
-        { success: false, slides: [], error: 'AIサーバーが混雑しています。少し待ってから再試行してください。' },
+        { success: false, slides: [], error: 'AIサーバーが混雑しています。少し待ってから再試行してください。クレジットは消費されていません。', creditsConsumed: false },
         { status: 503 }
       );
     }
 
     if (error.message?.includes('GEMINI_API_KEY')) {
       return NextResponse.json(
-        { success: false, slides: [], error: 'APIキーが設定されていません。' },
+        { success: false, slides: [], error: 'APIキーが設定されていません。', creditsConsumed: false },
         { status: 500 }
       );
     }
 
     return NextResponse.json(
-      { success: false, slides: [], error: 'スライド生成に失敗しました。再試行してください。' },
+      { success: false, slides: [], error: 'スライド生成に失敗しました。クレジットは消費されていません。再試行してください。', creditsConsumed: false },
       { status: 500 }
     );
   }

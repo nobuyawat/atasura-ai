@@ -14,7 +14,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateSlideImage, callGeminiWithRetryAndTokens } from '@/lib/gemini';
 import { createClient } from '@/lib/supabase/server';
-import { logGenerationTokens, checkCredits, checkFreePlanLimit, consumeCredits, type GenerationActionType } from '@/lib/credits';
+import { logGenerationTokens, preGenerationCheck, consumeCreditsIdempotent, type GenerationActionType } from '@/lib/credits';
+import { randomUUID } from 'crypto';
 
 // 画像生成モード
 export type ImageContextMode = 'decorative' | 'contextual';
@@ -204,8 +205,9 @@ export async function POST(
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
 
-    const body: SlideImageRequest = await request.json();
+    const body: SlideImageRequest & { requestId?: string } = await request.json();
     const sessionId = body.sessionId;
+    const requestId = body.requestId || randomUUID();
 
     const contextMode: ImageContextMode = body.contextMode || 'decorative';
 
@@ -232,47 +234,19 @@ export async function POST(
       );
     }
 
-    // クレジット残高チェック + 1クレジット消費
+    // 生成前チェック（クレジット消費はしない）
+    let userPlan = 'free';
     if (userId) {
-      const freePlanCheck = await checkFreePlanLimit(userId);
-      if (!freePlanCheck.allowed) {
+      const check = await preGenerationCheck(userId, 1);
+      userPlan = check.plan;
+      if (!check.allowed && check.errorResponse) {
         return NextResponse.json(
           {
             success: false, slideId: body.slideId, sectionId: body.sectionId,
-            imageStatus: 'failed', errorMessage: '無料プランの上限に達しました。',
+            imageStatus: 'failed', errorMessage: check.errorResponse.error,
           },
-          { status: 402 }
+          { status: check.errorResponse.status }
         );
-      }
-      if (freePlanCheck.plan !== 'free') {
-        const creditCheck = await checkCredits(userId, 1);
-        if (!creditCheck.hasCredits) {
-          console.log(`[generate-slide-image] Insufficient credits: user=${userId}, remaining=${creditCheck.creditsRemaining}`);
-          return NextResponse.json(
-            {
-              success: false, slideId: body.slideId, sectionId: body.sectionId,
-              imageStatus: 'failed', errorMessage: '今月のクレジットを使い切りました。',
-            },
-            { status: 402 }
-          );
-        }
-
-        // クレジットを1消費（アトミック減算）
-        const consumeResult = await consumeCredits(userId, 1, sessionId);
-        if (!consumeResult.success) {
-          console.error(`[generate-slide-image] Credit consumption failed: user=${userId}, error=${consumeResult.error}`);
-          return NextResponse.json(
-            {
-              success: false, slideId: body.slideId, sectionId: body.sectionId,
-              imageStatus: 'failed',
-              errorMessage: consumeResult.error === 'insufficient_credits'
-                ? '今月のクレジットを使い切りました。'
-                : 'クレジット消費に失敗しました。',
-            },
-            { status: consumeResult.error === 'insufficient_credits' ? 402 : 500 }
-          );
-        }
-        console.log(`[generate-slide-image] Credit consumed: user=${userId}, credits_before=${creditCheck.creditsRemaining}, cost=1, credits_after=${consumeResult.creditsRemaining}`);
       }
     }
 
@@ -363,6 +337,22 @@ export async function POST(
 
     if (result.status === 'success' && result.base64) {
       console.log('[generate-slide-image] ✅ Success, base64 length:', result.base64.length);
+
+      // === 画像生成成功 → ここでクレジット消費 ===
+      let creditsConsumed = false;
+      let creditsRemaining: number | undefined;
+
+      if (userId && userPlan !== 'free') {
+        const consumeResult = await consumeCreditsIdempotent(
+          userId, requestId, 1, 'generate_slide_image',
+          { slideId: body.slideId, sectionId: body.sectionId, contextMode },
+          sessionId
+        );
+        creditsConsumed = consumeResult.creditsConsumed;
+        creditsRemaining = consumeResult.creditsRemaining;
+        console.log(`[generate-slide-image] Credit consumed after success: user=${userId}, consumed=${creditsConsumed}, remaining=${creditsRemaining}`);
+      }
+
       return NextResponse.json({
         success: true,
         slideId: body.slideId,
@@ -370,15 +360,19 @@ export async function POST(
         imageStatus: 'success',
         imageBase64: result.base64,
         imageMimeType: result.mimeType || 'image/png',
+        creditsConsumed,
+        remainingCredits: creditsRemaining,
       });
     } else {
-      console.log('[generate-slide-image] ❌ Failed:', result.errorMessage);
+      // 画像生成失敗 → クレジット消費しない
+      console.log('[generate-slide-image] ❌ Failed:', result.errorMessage, '(クレジット消費なし)');
       return NextResponse.json({
         success: false,
         slideId: body.slideId,
         sectionId: body.sectionId,
         imageStatus: 'failed',
-        errorMessage: result.errorMessage || '画像生成に失敗しました',
+        errorMessage: (result.errorMessage || '画像生成に失敗しました') + ' クレジットは消費されていません。',
+        creditsConsumed: false,
       });
     }
 
@@ -392,7 +386,8 @@ export async function POST(
         slideId: '',
         sectionId: '',
         imageStatus: 'failed',
-        errorMessage: error?.message || '画像生成中にエラーが発生しました',
+        errorMessage: (error?.message || '画像生成中にエラーが発生しました') + ' クレジットは消費されていません。',
+        creditsConsumed: false,
       },
       { status: 500 }
     );
