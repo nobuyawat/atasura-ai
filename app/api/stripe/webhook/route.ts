@@ -8,6 +8,7 @@
  * - customer.subscription.deleted: 解約完了
  * - invoice.payment_succeeded: 更新成功（月次クレジットリセット）
  * - invoice.payment_failed: 支払い失敗
+ * - charge.refunded: 返金完了 → plan=free, credits=0, status=refunded
  * - subscription_schedule.canceled/released: ダウングレード予定クリア
  *
  * 環境変数ベースの Price ID → プラン名 逆引きで判定
@@ -18,7 +19,7 @@ import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
 import { resolvePlanFromPrice, getPlanFromPriceId, PLAN_CREDITS } from '@/lib/plans';
-import { sendWelcomeEmail } from '@/lib/email/resend';
+import { sendWelcomeEmail, sendRefundAdminNotification } from '@/lib/email/resend';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -130,6 +131,13 @@ export async function POST(request: NextRequest) {
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
         await handlePaymentFailed(invoice, supabase);
+        break;
+      }
+
+      // ── 返金イベント ──
+      case 'charge.refunded': {
+        const charge = event.data.object as Stripe.Charge;
+        await handleChargeRefunded(charge, supabase);
         break;
       }
 
@@ -513,6 +521,118 @@ async function handleScheduleCleared(
   } catch (err) {
     console.error('[Webhook] Error handling schedule event:', err);
   }
+}
+
+/**
+ * 返金（charge.refunded）時の処理
+ *
+ * Stripe Dashboard で返金が実行された場合に発火。
+ * 1. 冪等性チェック（同一 charge の二重処理防止）
+ * 2. customer_id → user_id 解決
+ * 3. サブスクリプションをキャンセル（アクティブなら）
+ * 4. DB を free プランに戻す（クレジット0、ステータス refunded）
+ * 5. refund_requests テーブルを processed に更新
+ *
+ * 部分返金（amount_refunded < amount）はログのみ、プラン変更しない。
+ */
+async function handleChargeRefunded(
+  charge: Stripe.Charge,
+  supabase: ReturnType<typeof createServiceClient>
+) {
+  const customerId = charge.customer as string;
+  const isFullRefund = charge.refunded === true;
+  const amountRefunded = charge.amount_refunded;
+  const totalAmount = charge.amount;
+
+  console.log(`[Webhook][Refund] charge.refunded received`, {
+    chargeId: charge.id,
+    customerId,
+    amount: totalAmount,
+    amountRefunded,
+    isFullRefund,
+    paymentIntent: charge.payment_intent,
+  });
+
+  // ── 0. 部分返金はログのみ ──
+  if (!isFullRefund) {
+    console.log(`[Webhook][Refund] Partial refund (${amountRefunded}/${totalAmount}), no plan change`);
+    return;
+  }
+
+  // ── 1. customer_id → user_id 解決 ──
+  const userId = await resolveUserIdByCustomer(customerId, supabase);
+  if (!userId) {
+    console.error(`[Webhook][Refund] No user found for customer: ${customerId}`);
+    return;
+  }
+
+  // ── 2. 冪等性チェック: 既に refunded なら skip ──
+  const { data: currentSub } = await supabase
+    .from('subscriptions')
+    .select('stripe_subscription_id, plan, status')
+    .eq('user_id', userId)
+    .single();
+
+  if (currentSub?.status === 'refunded') {
+    console.log(`[Webhook][Refund] User ${userId} already refunded, skipping`);
+    return;
+  }
+
+  // ── 3. サブスクリプションをキャンセル（アクティブなら） ──
+  if (currentSub?.stripe_subscription_id && currentSub.status !== 'canceled') {
+    try {
+      await stripe.subscriptions.cancel(currentSub.stripe_subscription_id);
+      console.log(`[Webhook][Refund] Subscription ${currentSub.stripe_subscription_id} canceled`);
+    } catch (cancelErr) {
+      // 既にキャンセル済み等の場合もあるのでログのみ
+      console.warn(`[Webhook][Refund] Could not cancel subscription:`, cancelErr);
+    }
+  }
+
+  // ── 4. DB を free プランに戻す ──
+  const { error: updateError } = await supabase
+    .from('subscriptions')
+    .update({
+      plan: 'free',
+      status: 'refunded',
+      price_id: null,
+      cancel_at_period_end: false,
+      pending_price_id: null,
+      credits_limit: 0,
+      credits_remaining: 0,
+      credits_reset_at: new Date().toISOString(),
+      monthly_usage_count: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId);
+
+  if (updateError) {
+    console.error(`[Webhook][Refund] Error updating subscription to free:`, updateError);
+    throw updateError;
+  }
+
+  console.log(`[Webhook][Refund] ✅ User ${userId} reverted to free plan (refunded from ${currentSub?.plan})`);
+
+  // ── 5. refund_requests テーブルを更新（存在する場合） ──
+  try {
+    const { error: refundReqError } = await supabase
+      .from('refund_requests')
+      .update({
+        status: 'processed',
+        processed_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('status', 'pending');
+
+    if (refundReqError) {
+      console.warn(`[Webhook][Refund] refund_requests update skipped:`, refundReqError);
+    }
+  } catch {
+    // refund_requests テーブルが存在しない場合も安全にスキップ
+    console.warn(`[Webhook][Refund] refund_requests table not accessible, skipping`);
+  }
+
+  console.log(`[Webhook][Refund] ✅ Refund processing complete for user ${userId}`);
 }
 
 /* ================================================================== */
