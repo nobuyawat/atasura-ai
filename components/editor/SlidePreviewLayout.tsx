@@ -16,6 +16,25 @@ import { Slide, BulletImage } from '@/lib/types';
 import { BaseTemplateId, getBaseTemplate, getBulletLevel, getEffectiveColumnCount, splitBulletsIntoColumns } from '@/lib/base-templates';
 
 // =====================================================
+// 定型文（プレースホルダー）検出
+// =====================================================
+const PLACEHOLDER_PROMPTS = [
+  'アイコン/図解/写真など',
+  'アイコン/図解/写真 など',
+  'アイコン/図解/写真',
+  'ビジネス向けのシンプルなイラスト',
+];
+
+function isPlaceholderPrompt(prompt: string | undefined | null): boolean {
+  if (!prompt) return true;
+  const trimmed = prompt.trim();
+  if (trimmed.length === 0) return true;
+  if (PLACEHOLDER_PROMPTS.includes(trimmed)) return true;
+  if (trimmed.length < 10 && /^[アイコン図解写真イラストなど\/・\s]+$/.test(trimmed)) return true;
+  return false;
+}
+
+// =====================================================
 // Props定義
 // =====================================================
 
@@ -357,7 +376,12 @@ function ImageArea({
       ) : slide.imageStatus === 'failed' ? (
         <div className="relative flex-1 flex flex-col items-center justify-center text-center p-2 z-10">
           <AlertCircle className={`${isAccent ? 'w-5 h-5' : 'w-8 h-8'} text-red-400`} />
-          <span className="text-[9px] text-red-600 font-medium mt-1">失敗</span>
+          <span className="text-[9px] text-red-600 font-medium mt-1">
+            {slide.imageErrorMessage?.includes('プロンプト') ? '要手動入力' : '失敗'}
+          </span>
+          {slide.imageErrorMessage && (
+            <span className="text-[7px] text-red-500 mt-0.5 max-w-[120px] line-clamp-2">{slide.imageErrorMessage}</span>
+          )}
           <div className="flex gap-1 mt-2">
             <button
               onClick={(e) => { e.stopPropagation(); onImageUploadClick(); }}
@@ -450,6 +474,14 @@ function ImageArea({
               </div>
             )}
           </div>
+          {/* 定型文（プレースホルダー）警告 */}
+          {isPlaceholderPrompt(editingVisualPrompt) && editingVisualPrompt.trim() && (
+            <div className="px-2">
+              <p className="text-[8px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-1 rounded">
+                ⚠️ 汎用的なプロンプトです。スライド内容に合った具体的な説明に変更してください。
+              </p>
+            </div>
+          )}
           <div className="p-2 border-t border-slate-200 flex gap-2">
             <button
               onClick={() => { onSetIsEditingVisualPrompt(false); onSetEditingVisualPrompt(''); }}
@@ -460,9 +492,9 @@ function ImageArea({
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onGenerateImage(); }}
-              disabled={!editingVisualPrompt.trim() || isGeneratingImage}
+              disabled={!editingVisualPrompt.trim() || isPlaceholderPrompt(editingVisualPrompt) || isGeneratingImage}
               className="flex-1 py-2 text-[9px] bg-emerald-500 hover:bg-emerald-600 text-white rounded-md flex items-center justify-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30 transition-all"
-              title="クレジットを消費してAI生成します"
+              title={isPlaceholderPrompt(editingVisualPrompt) ? '具体的なプロンプトを入力してください' : 'クレジットを消費してAI生成します'}
             >
               {isGeneratingImage ? (
                 <>
@@ -474,7 +506,7 @@ function ImageArea({
                   <Zap className="w-3 h-3" />
                   AI画像生成
                   <span className="text-[7px] font-medium bg-white/25 px-1 py-0.5 rounded-full">
-                    -11
+                    -1
                   </span>
                 </>
               )}

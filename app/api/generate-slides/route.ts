@@ -126,12 +126,13 @@ ${section.purposeText ? `### 伝えたいこと\n${section.purposeText}` : ''}
       "bullets": ["要約した箇条書き1", "要約した箇条書き2", "要約した箇条書き3"],
       "speakerNotes": "本文・台本を要約したスピーカーノート...",
       "layoutType": "title_bullets",
-      "imageIntent": "アイコン/図解/写真 など"
+      "imageIntent": "スライド内容を表す具体的な画像の説明（例: 売上推移を示す棒グラフ、チームミーティングの写真）"
     }
   ]
 }
 
 **重要**: 原則1枚。bullets配列には上記の箇条書きをまとめて入れる。
+**imageIntent**: 「アイコン/図解/写真」のような汎用的な記述は禁止。スライド内容に合った具体的な画像説明を書くこと。
 JSONのみを出力してください。
 `;
 }
@@ -203,10 +204,12 @@ ${sectionsContent}
       "bullets": ["その小見出しの箇条書きをまとめたもの1", "まとめたもの2", "まとめたもの3"],
       "speakerNotes": "本文の要約...",
       "layoutType": "title_bullets",
-      "imageIntent": "アイコン/図解/写真"
+      "imageIntent": "スライド内容に合った具体的な画像の説明（例: グローバル市場の地図、成長を示す折れ線グラフ）"
     }
   ]
 }
+
+**imageIntent**: 「アイコン/図解/写真」のような汎用的な記述は禁止。スライド内容に合った具体的な画像説明を書くこと。
 
 各小見出しのIDと対応させてください:
 ${request.sections.map(s => `- ${s.sectionId}: ${s.sectionTitle}`).join('\n')}

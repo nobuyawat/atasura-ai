@@ -148,6 +148,29 @@ function convertBlocksToSlide(blocks: ScriptBlock[]): SlideData {
 // @see ./ScriptGenerationModal.tsx
 
 // =====================================================
+// Visual Prompt — 定型文（プレースホルダー）検出
+// Gemini がスライド生成時に例文をそのまま返すケースがある。
+// これらが画像プロンプトとして使われるとクレジットが無駄になるため検出してブロックする。
+// =====================================================
+const PLACEHOLDER_PROMPTS = [
+  'アイコン/図解/写真など',
+  'アイコン/図解/写真 など',
+  'アイコン/図解/写真',
+  'ビジネス向けのシンプルなイラスト',
+];
+
+function isPlaceholderPrompt(prompt: string | undefined | null): boolean {
+  if (!prompt) return true;
+  const trimmed = prompt.trim();
+  if (trimmed.length === 0) return true;
+  // 完全一致チェック
+  if (PLACEHOLDER_PROMPTS.includes(trimmed)) return true;
+  // 部分一致チェック（「アイコン/図解」「写真など」のみの短すぎるプロンプト）
+  if (trimmed.length < 10 && /^[アイコン図解写真イラストなど\/・\s]+$/.test(trimmed)) return true;
+  return false;
+}
+
+// =====================================================
 // Visual Prompt 自動生成（スライドコンテンツ→抽象的ビジュアル概念）
 // =====================================================
 function generateVisualPromptFromContent(title: string, bullets: string[], speakerNotes?: string): string {
@@ -182,8 +205,8 @@ function generateVisualPromptFromContent(title: string, bullets: string[], speak
     return `${content} に関するイラスト・図解`;
   }
 
-  // フォールバック
-  return 'アイコン/図解/写真など';
+  // フォールバック: 空文字を返す（定型文はセットしない → UIで手動入力を促す）
+  return '';
 }
 
 // =====================================================
@@ -967,11 +990,47 @@ export default function EditorScreen({ course, onCourseUpdate }: EditorScreenPro
     setIsGeneratingImage(true);
 
     try {
-      // カスタムプロンプト > スライドのvisualPrompt > imageIntent > 自動生成 > デフォルト
-      const visualPrompt = customVisualPrompt ||
-        slide.visualPrompt ||
-        slide.imageIntent ||
+      // カスタムプロンプト > スライドのvisualPrompt > imageIntent > 自動生成
+      // ※ 定型文（プレースホルダー）はスキップして本文解析にフォールバック
+      const candidates = [customVisualPrompt, slide.visualPrompt, slide.imageIntent];
+      const validPrompt = candidates.find(p => p && p.trim() && !isPlaceholderPrompt(p));
+      const visualPrompt = validPrompt ||
         generateVisualPromptFromContent(slide.title, slide.bullets, slide.speakerNotes);
+
+      // ── クレジット保護: 定型文のまま画像生成は絶対に走らせない ──
+      if (isPlaceholderPrompt(visualPrompt)) {
+        console.error('[IMAGE_GEN] ❌ BLOCKED: placeholder prompt detected, aborting to protect credits', {
+          slideId,
+          visualPrompt,
+          slideTitle: slide.title,
+        });
+        // UI向けにエラー状態をセット（生成失敗として扱う）
+        const errorCourse = {
+          ...course,
+          chapters: course.chapters.map(ch => ({
+            ...ch,
+            sections: ch.sections.map(sec =>
+              sec.id === activeSectionId
+                ? {
+                    ...sec,
+                    slides: sec.slides?.map(s =>
+                      s.slideId === slideId
+                        ? {
+                            ...s,
+                            imageStatus: 'failed' as const,
+                            imageErrorMessage: 'スライド本文からプロンプトを生成できませんでした。画像の説明を手動で入力してください。',
+                          }
+                        : s
+                    ),
+                  }
+                : sec
+            ),
+          })),
+          updatedAt: new Date(),
+        };
+        onCourseUpdate(errorCourse);
+        return;
+      }
 
       console.log('[IMAGE_GEN] Using visualPrompt:', visualPrompt);
 
@@ -1064,10 +1123,11 @@ export default function EditorScreen({ course, onCourseUpdate }: EditorScreenPro
 
   // Visual Promptを編集開始
   const handleStartEditingVisualPrompt = useCallback((slide: Slide) => {
-    // 現在のプロンプトまたは自動生成プロンプトをセット
     // 優先順位: 既存のvisualPrompt > imageIntent > スライド内容から自動生成
-    const currentPrompt = slide.visualPrompt ||
-      slide.imageIntent ||
+    // ただし定型文（プレースホルダー）はスキップして本文解析にフォールバック
+    const candidates = [slide.visualPrompt, slide.imageIntent];
+    const validPrompt = candidates.find(p => p && !isPlaceholderPrompt(p));
+    const currentPrompt = validPrompt ||
       generateVisualPromptFromContent(slide.title, slide.bullets, slide.speakerNotes);
     setEditingVisualPrompt(currentPrompt);
     setIsEditingVisualPrompt(true);

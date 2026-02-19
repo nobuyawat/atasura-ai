@@ -250,8 +250,30 @@ export async function POST(
       }
     }
 
-    // visualPrompt がない場合はデフォルトプロンプト
-    const visualPromptJa = body.visualPrompt || 'ビジネス向けのシンプルなイラスト';
+    // ── サーバーサイド: 定型文（プレースホルダー）バリデーション ──
+    // クライアント側でブロックしていても、直接APIを叩かれる可能性があるため二重防御
+    const PLACEHOLDER_PROMPTS_SERVER = [
+      'アイコン/図解/写真など',
+      'アイコン/図解/写真 など',
+      'アイコン/図解/写真',
+      'ビジネス向けのシンプルなイラスト',
+    ];
+    const rawPrompt = (body.visualPrompt || '').trim();
+    if (!rawPrompt || PLACEHOLDER_PROMPTS_SERVER.includes(rawPrompt)) {
+      console.error('[generate-slide-image] ❌ BLOCKED: placeholder prompt', { prompt: rawPrompt, slideId: body.slideId });
+      return NextResponse.json(
+        {
+          success: false,
+          slideId: body.slideId,
+          sectionId: body.sectionId,
+          imageStatus: 'failed',
+          errorMessage: 'スライド本文に基づく具体的なプロンプトを入力してください。定型文での画像生成はブロックされます。',
+        },
+        { status: 400 }
+      );
+    }
+
+    const visualPromptJa = rawPrompt;
 
     // dev時のみ日本語プロンプトをログ
     if (process.env.NODE_ENV === 'development') {
