@@ -37,7 +37,7 @@ export default function RootLayout({
                         <SharedMobileHeader />
                   {children}
                         <Analytics />
-                </body>body>
-          </html>html>
+                </body>
+          </html>
         );
-}</html>
+}
