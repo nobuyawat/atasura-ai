@@ -19,7 +19,7 @@ import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
 import { resolvePlanFromPrice, getPlanFromPriceId, PLAN_CREDITS } from '@/lib/plans';
-import { sendWelcomeEmail, sendRefundAdminNotification } from '@/lib/email/resend';
+import { sendWelcomeEmail } from '@/lib/email/resend';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
@@ -95,67 +95,77 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await handleCheckoutCompleted(session, supabase);
-        // ウェルカムメール送信（決済処理には影響させない）
-        await sendWelcomeEmailSafe(event, session, supabase);
-        break;
-      }
-
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionUpdate(subscription, supabase);
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionDeleted(subscription, supabase);
-        break;
-      }
-
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice;
-        // 月次更新の場合のみ処理（初回購入は checkout.session.completed で処理）
-        if (invoice.billing_reason === 'subscription_cycle') {
-          await handleRenewalPayment(invoice, supabase);
-        } else {
-          console.log(`[Webhook] Payment succeeded (reason: ${invoice.billing_reason}), invoice: ${invoice.id}`);
+    // 各ハンドラのエラーを個別にキャッチし、200を返す構造にする
+    // Stripeは500を受けるとリトライし続けるため、処理エラーでも200を返す
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object as Stripe.Checkout.Session;
+          await handleCheckoutCompleted(session, supabase);
+          // ウェルカムメール送信（決済処理には影響させない）
+          await sendWelcomeEmailSafe(event, session, supabase);
+          break;
         }
-        break;
-      }
 
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        await handlePaymentFailed(invoice, supabase);
-        break;
-      }
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object as Stripe.Subscription;
+          await handleSubscriptionUpdate(subscription, supabase);
+          break;
+        }
 
-      // ── 返金イベント ──
-      case 'charge.refunded': {
-        const charge = event.data.object as Stripe.Charge;
-        await handleChargeRefunded(charge, supabase);
-        break;
-      }
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object as Stripe.Subscription;
+          await handleSubscriptionDeleted(subscription, supabase);
+          break;
+        }
 
-      // Subscription Schedule 関連（ダウングレード予定のクリア）
-      case 'subscription_schedule.canceled':
-      case 'subscription_schedule.released': {
-        const schedule = event.data.object as Stripe.SubscriptionSchedule;
-        await handleScheduleCleared(schedule, supabase);
-        break;
-      }
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object as Stripe.Invoice;
+          // 月次更新の場合のみ処理（初回購入は checkout.session.completed で処理）
+          if (invoice.billing_reason === 'subscription_cycle') {
+            await handleRenewalPayment(invoice, supabase);
+          } else {
+            console.log(`[Webhook] Payment succeeded (reason: ${invoice.billing_reason}), invoice: ${invoice.id}`);
+          }
+          break;
+        }
 
-      default:
-        console.log(`[Webhook] Unhandled event type: ${event.type}`);
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as Stripe.Invoice;
+          await handlePaymentFailed(invoice, supabase);
+          break;
+        }
+
+        // ── 返金イベント ──
+        case 'charge.refunded': {
+          const charge = event.data.object as Stripe.Charge;
+          await handleChargeRefunded(charge, supabase);
+          break;
+        }
+
+        // Subscription Schedule 関連（ダウングレード予定のクリア）
+        case 'subscription_schedule.canceled':
+        case 'subscription_schedule.released': {
+          const schedule = event.data.object as Stripe.SubscriptionSchedule;
+          await handleScheduleCleared(schedule, supabase);
+          break;
+        }
+
+        default:
+          console.log(`[Webhook] Unhandled event type: ${event.type} — returning 200`);
+      }
+    } catch (handlerError) {
+      // ハンドラ内のエラーはログに記録するが、200を返す
+      // Stripeが500を受けるとリトライし続けるため
+      console.error(`[Webhook] Handler error for ${event.type}:`, handlerError);
     }
 
+    console.log(`[Webhook] ====== Done: ${event.type} ======`);
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('[Webhook] Error:', error);
+    // ここに到達するのは署名検証前のエラー（body取得失敗等）のみ
+    console.error('[Webhook] Fatal error (pre-verification):', error);
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 }
@@ -238,7 +248,7 @@ async function handleCheckoutCompleted(
 
   if (error) {
     console.error('[Webhook][SupabaseError] Error saving subscription:', error);
-    throw error;
+    return; // エラーをthrowせず、200を返せるようにする
   }
 
   console.log(`[Webhook] ✅ Subscription saved: user=${userId}, plan=${plan}, credits=${creditLimit}`, data);
@@ -328,7 +338,7 @@ async function handleSubscriptionUpdate(
 
   if (error) {
     console.error('[Webhook] Error updating subscription:', error);
-    throw error;
+    return; // エラーをthrowせず、200を返せるようにする
   }
 
   console.log(`[Webhook] Subscription updated: user=${userId}, status=${subscription.status}, plan=${plan}, changed=${planActuallyChanged}`);
@@ -608,7 +618,7 @@ async function handleChargeRefunded(
 
   if (updateError) {
     console.error(`[Webhook][Refund] Error updating subscription to free:`, updateError);
-    throw updateError;
+    return; // エラーをthrowせず、200を返せるようにする
   }
 
   console.log(`[Webhook][Refund] ✅ User ${userId} reverted to free plan (refunded from ${currentSub?.plan})`);
