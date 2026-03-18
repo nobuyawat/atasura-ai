@@ -62,6 +62,42 @@ function getPeriodFromSubscription(subscription: Stripe.Subscription): {
   };
 }
 
+/**
+ * Invoice から subscription ID を安全に取得するヘルパー
+ * Stripe API 2025-11-17.clover ではトップレベルの invoice.subscription が null になり、
+ * 代わりに invoice.parent.subscription_details.subscription にある
+ */
+function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
+  // 1. トップレベル（旧APIバージョン）
+  if (invoice.subscription) {
+    return typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : invoice.subscription.id;
+  }
+
+  // 2. parent.subscription_details（2025-11-17.clover 以降）
+  const parent = (invoice as any).parent;
+  if (parent?.subscription_details?.subscription) {
+    return parent.subscription_details.subscription;
+  }
+
+  // 3. lines.data[0] からフォールバック
+  const lineItem = invoice.lines?.data?.[0];
+  if (lineItem) {
+    const lineParent = (lineItem as any).parent;
+    if (lineParent?.subscription_item_details?.subscription) {
+      return lineParent.subscription_item_details.subscription;
+    }
+    // 旧バージョンでは lineItem.subscription に直接あることも
+    if ((lineItem as any).subscription) {
+      return (lineItem as any).subscription;
+    }
+  }
+
+  console.warn('[Webhook] Could not extract subscription ID from invoice:', invoice.id);
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   console.log('[Webhook] ====== Incoming request ======');
   try {
@@ -397,8 +433,11 @@ async function handleRenewalPayment(
   invoice: Stripe.Invoice,
   supabase: ReturnType<typeof createServiceClient>
 ) {
-  const subscriptionId = invoice.subscription as string;
-  if (!subscriptionId) return;
+  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
+  if (!subscriptionId) {
+    console.warn(`[Webhook] No subscriptionId in invoice ${invoice.id}, skipping renewal`);
+    return;
+  }
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   let userId: string | null = subscription.metadata?.userId || null;
@@ -445,8 +484,11 @@ async function handlePaymentFailed(
   invoice: Stripe.Invoice,
   supabase: ReturnType<typeof createServiceClient>
 ) {
-  const subscriptionId = invoice.subscription as string;
-  if (!subscriptionId) return;
+  const subscriptionId = getSubscriptionIdFromInvoice(invoice);
+  if (!subscriptionId) {
+    console.warn(`[Webhook] No subscriptionId in invoice ${invoice.id}, skipping payment failed`);
+    return;
+  }
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   let userId: string | null = subscription.metadata?.userId || null;
