@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { stripe } from '@/lib/stripe';
-import { resolvePlanFromPrice, getPlanFromPriceId, PLAN_CREDITS } from '@/lib/plans';
+import { resolvePlanFromPrice, getPlanFromPriceId, PLAN_CREDITS, isKnownPriceId } from '@/lib/plans';
 import { sendWelcomeEmail } from '@/lib/email/resend';
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
@@ -137,9 +137,12 @@ export async function POST(request: NextRequest) {
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as Stripe.Checkout.Session;
-          await handleCheckoutCompleted(session, supabase);
-          // ウェルカムメール送信（決済処理には影響させない）
-          await sendWelcomeEmailSafe(event, session, supabase);
+          const handled = await handleCheckoutCompleted(session, supabase);
+          // ★アタスラAI商品のときだけウェルカムメール送信。
+          //   共有Stripeアカウント上の別商品（Fluent Room等）には送らない（誤送信防止）。
+          if (handled) {
+            await sendWelcomeEmailSafe(event, session, supabase);
+          }
           break;
         }
 
@@ -228,7 +231,7 @@ function resolvePlanFromSubscription(subscription: Stripe.Subscription): { price
 async function handleCheckoutCompleted(
   session: Stripe.Checkout.Session,
   supabase: ReturnType<typeof createServiceClient>
-) {
+): Promise<boolean> {
   const userId = session.client_reference_id || session.metadata?.userId;
   const subscriptionId = session.subscription as string;
 
@@ -243,12 +246,19 @@ async function handleCheckoutCompleted(
 
   if (!userId) {
     console.error('[Webhook] No userId found in checkout session — cannot update DB');
-    return;
+    return false;
   }
 
   // サブスクリプション詳細を取得
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   const { priceId, plan } = resolvePlanFromSubscription(subscription);
+
+  // ★共有Stripeアカウント上の別商品（Fluent Room等）はアタスラAIで処理しない。
+  if (!isKnownPriceId(priceId)) {
+    console.log('[Webhook] Skipping non-Atasura product (checkout):', priceId);
+    return false;
+  }
+
   const { periodStart, periodEnd } = getPeriodFromSubscription(subscription);
 
   // クレジット上限を算出
@@ -284,10 +294,11 @@ async function handleCheckoutCompleted(
 
   if (error) {
     console.error('[Webhook][SupabaseError] Error saving subscription:', error);
-    return; // エラーをthrowせず、200を返せるようにする
+    return false; // エラーをthrowせず、200を返せるようにする
   }
 
   console.log(`[Webhook] ✅ Subscription saved: user=${userId}, plan=${plan}, credits=${creditLimit}`, data);
+  return true;
 }
 
 /**
@@ -309,6 +320,13 @@ async function handleSubscriptionUpdate(
   }
 
   const { priceId, plan } = resolvePlanFromSubscription(subscription);
+
+  // ★共有Stripeアカウント上の別商品（Fluent Room等）はアタスラAIで処理しない。
+  if (!isKnownPriceId(priceId)) {
+    console.log('[Webhook] Skipping non-Atasura product (subscription update):', priceId);
+    return;
+  }
+
   const { periodStart, periodEnd } = getPeriodFromSubscription(subscription);
 
   // 現在の DB 状態を取得して、実際にプランが変わったか判定
@@ -387,6 +405,13 @@ async function handleSubscriptionDeleted(
   subscription: Stripe.Subscription,
   supabase: ReturnType<typeof createServiceClient>
 ) {
+  // ★共有Stripeアカウント上の別商品（Fluent Room等）の解約はアタスラAIで処理しない。
+  const delPriceId = subscription.items?.data?.[0]?.price?.id;
+  if (!isKnownPriceId(delPriceId)) {
+    console.log('[Webhook] Skipping non-Atasura product (subscription deleted):', delPriceId);
+    return;
+  }
+
   // metadata.userId → customer ID でフォールバック
   let userId: string | null = subscription.metadata?.userId || null;
   if (!userId) {

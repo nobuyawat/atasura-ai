@@ -143,6 +143,19 @@ export function getPlanFromPriceId(priceId: string): string {
 }
 
 /**
+ * その price_id がアタスラAIの既知プラン（STARTER/BASIC/CREATOR）か。
+ *
+ * 共有Stripeアカウントに別商品（例: Fluent Room）を追加すると、その決済イベントも
+ * このアプリの webhook に配信される。別商品をアタスラAIの購入として処理してしまうと
+ * 「ウェルカムメール誤送信」「subscriptions への誤書込」が起きるため、webhook 側で
+ * 既知 price 以外を弾くためのガード。未知/空は false。
+ */
+export function isKnownPriceId(priceId: string | null | undefined): boolean {
+  if (!priceId) return false;
+  return !!buildPriceIdToPlanMap()[priceId];
+}
+
+/**
  * プランのランク（数値）を取得
  */
 export function getPlanRank(plan: string): number {
